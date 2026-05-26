@@ -229,14 +229,30 @@ function teamsMatch(a, b) {
 
 // ───────────────────── HELPERS API-FOOTBALL ────────────────────────────────
 async function af(pathAndQuery) {
-  const url = `https://v3.football.api-sports.io${pathAndQuery}`;
-  const r = await fetch(url, { headers: { "x-apisports-key": API_FOOTBALL_KEY } });
-  const d = await r.json();
-  if (d.errors && Object.keys(d.errors).length) {
-    const msg = Object.values(d.errors).join(" | ");
-    throw new Error(`API-Football: ${msg}`);
+  // A "API-Football" existe em 2 provedores. Tentamos o direto (api-sports.io)
+  // e, se a chave for de outro tipo, caímos automaticamente no RapidAPI.
+  const attempts = [
+    { url: `https://v3.football.api-sports.io${pathAndQuery}`, headers: { "x-apisports-key": API_FOOTBALL_KEY } },
+    { url: `https://api-football-v1.p.rapidapi.com/v3${pathAndQuery}`, headers: { "x-rapidapi-key": API_FOOTBALL_KEY, "x-rapidapi-host": "api-football-v1.p.rapidapi.com" } },
+  ];
+  let lastErr = "";
+  for (const a of attempts) {
+    try {
+      const r = await fetch(a.url, { headers: a.headers });
+      const d = await r.json();
+      const errs = d.errors;
+      const hasErr = errs && (Array.isArray(errs) ? errs.length : Object.keys(errs).length);
+      if (hasErr) {
+        const msg = Array.isArray(errs) ? errs.join(" | ") : Object.values(errs).join(" | ");
+        if (/key|token|subscri|rapidapi|missing/i.test(msg)) { lastErr = msg; continue; } // chave não é deste provedor → tenta o próximo
+        throw new Error(`API-Football: ${msg}`);
+      }
+      return d;
+    } catch (e) {
+      lastErr = e.message;
+    }
   }
-  return d;
+  throw new Error(`API-Football: ${lastErr || "não consegui autenticar a chave em nenhum provedor."}`);
 }
 
 async function getStandings(leagueId, season) {
