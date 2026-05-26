@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: bet-analyzer-pro
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: API_FOOTBALL_KEY
+        sync: false
+      - key: ODDS_API_KEY
+        sync: false

@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#060b10">
+<title>Bet Analyzer Pro</title>
+<style>
+  :root{
+    --bg:#060b10; --bg2:#0a1628; --bg3:#0d1f14;
+    --line:#1a3a2a; --green:#00ff88; --green2:#00cc6a;
+    --text:#c8d6e5; --dim:#4a7c5c; --dim2:#6a9c7c;
+    --yellow:#f0c040; --red:#ff6b6b; --blue:#7dd8f8; --purple:#b8a0e8; --orange:#f0a050;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:'JetBrains Mono','SF Mono','Fira Code','Courier New',monospace;
+    font-size:14px;line-height:1.4;padding-bottom:40px;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  header{
+    background:linear-gradient(135deg,#0a1628,#0d1f12);
+    border-bottom:1px solid #00ff8825;padding:16px;
+    display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;
+  }
+  .logo{width:42px;height:42px;border-radius:10px;flex-shrink:0;
+    background:linear-gradient(135deg,var(--green),var(--green2));
+    display:flex;align-items:center;justify-content:center;font-size:22px;
+    box-shadow:0 0 18px #00ff8840;color:#060b10}
+  .htitle{font-size:17px;font-weight:700;color:var(--green);letter-spacing:.5px}
+  .hsub{font-size:10px;color:var(--dim);margin-top:2px}
+  /* TABS */
+  .tabs{display:flex;gap:6px;padding:12px 12px 0;position:sticky;top:74px;background:var(--bg);z-index:15}
+  .tab{flex:1;padding:11px 6px;border:1px solid var(--line);border-radius:9px;
+    background:var(--bg2);color:var(--dim);font-family:inherit;font-size:12px;
+    font-weight:700;cursor:pointer;text-align:center;transition:.15s}
+  .tab.active{background:linear-gradient(135deg,#0d2a1a,#0a1f14);color:var(--green);border-color:#00ff8840}
+  .panel{display:none;padding:12px}
+  .panel.active{display:block;animation:fade .3s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  /* CARD */
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+  .sec{font-size:10px;font-weight:700;color:var(--green);letter-spacing:1.5px;
+    text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+  label{font-size:10px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;
+    display:block;margin-bottom:5px}
+  input,select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+    color:var(--text);padding:11px 12px;font-size:15px;font-family:inherit;outline:none;transition:.15s}
+  input:focus,select:focus{border-color:var(--green)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .fg{margin-bottom:12px}
+  .fg:last-child{margin-bottom:0}
+  button.go{width:100%;background:linear-gradient(135deg,var(--green),var(--green2));
+    border:none;border-radius:10px;color:#060b10;font-family:inherit;font-size:14px;
+    font-weight:700;letter-spacing:.5px;padding:14px;cursor:pointer;margin-top:6px}
+  button.go:active{transform:scale(.99)}
+  button.ghost{width:100%;background:transparent;border:1px solid var(--line);border-radius:10px;
+    color:var(--dim);font-family:inherit;font-size:13px;padding:12px;cursor:pointer;margin-top:8px}
+  .modesw{display:flex;gap:6px;margin-bottom:12px}
+  .modesw button{flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);
+    color:var(--dim);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+  .modesw button.on{background:#0d2a1a;color:var(--green);border-color:#00ff8840}
+  .note{font-size:11px;color:var(--dim);line-height:1.6;margin-top:6px}
+  .err{background:#2a0a0a;border:1px solid #ff4444;color:#ff8888;border-radius:8px;padding:11px;font-size:12px;margin-bottom:12px}
+  .ok{background:#0d2a1a;border:1px solid #00ff8840;color:var(--green);border-radius:8px;padding:11px;font-size:12px;margin-bottom:12px}
+  .loading{text-align:center;padding:30px;color:var(--dim);font-size:13px}
+  .spin{display:inline-block;width:22px;height:22px;border:3px solid var(--line);
+    border-top-color:var(--green);border-radius:50%;animation:sp .8s linear infinite;margin-bottom:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* RESULT */
+  .topbet{background:linear-gradient(135deg,#0d2a1a,#0a1f14);border:1px solid #00ff8840;
+    border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:0 0 40px #00ff8810}
+  .tb-lbl{font-size:10px;color:var(--dim);letter-spacing:1.5px;margin-bottom:6px}
+  .tb-bet{font-size:20px;font-weight:700;color:var(--green);margin-bottom:3px}
+  .tb-desc{font-size:12px;color:var(--dim2);margin-bottom:14px}
+  .metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .metric{background:var(--bg);border-radius:9px;padding:10px;text-align:center}
+  .m-v{font-size:18px;font-weight:700;color:var(--green)}
+  .m-v.y{color:var(--yellow)} .m-v.b{color:var(--blue)}
+  .m-l{font-size:9px;color:var(--dim);margin-top:3px;letter-spacing:.5px}
+  .bar{margin-bottom:9px}
+  .bar-t{display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px}
+  .bar-bg{background:var(--bg);border-radius:4px;height:6px;overflow:hidden}
+  .bar-f{height:100%;border-radius:4px;transition:width .7s ease}
+  .rank{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
+    border:1px solid var(--line);margin-bottom:7px;background:var(--bg)}
+  .rank.top{background:#0d2a1a;border-color:#00ff8830}
+  .badge{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;color:#060b10;flex-shrink:0}
+  .arb-card{border-radius:12px;padding:14px;margin-bottom:10px}
+  .arb-yes{background:#0d2a1a;border:1px solid #00ff8840}
+  .arb-no{background:#2a1f0a;border:1px solid #f0c04040}
+  .stake-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;
+    background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:12px}
+  .disc{font-size:10px;color:#2a4a3a;text-align:center;margin-top:10px;line-height:1.6}
+  .guide h3{color:var(--text);font-size:14px;margin:14px 0 6px}
+  .guide p,.guide li{font-size:12px;color:var(--dim2);line-height:1.7;margin-bottom:4px}
+  .guide ol{padding-left:18px}
+  .pill{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:6px;
+    padding:2px 8px;font-size:10px;color:var(--dim);margin:2px 2px 2px 0}
+  @media(max-width:480px){
+    .grid3{grid-template-columns:1fr 1fr}
+    .htitle{font-size:15px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">⚡</div>
+    <div>
+      <div class="htitle">BET ANALYZER PRO</div>
+      <div class="hsub">Poisson/Dixon-Coles · Arbitragem · dados reais</div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="analyze">📊 Análise</button>
+    <button class="tab" data-tab="value">💰 Valor</button>
+    <button class="tab" data-tab="arb">⇄ Arb</button>
+    <button class="tab" data-tab="guide">ℹ Guia</button>
+  </div>
+
+  <!-- ============ ANALISAR ============ -->
+  <div id="p-analyze" class="panel active">
+    <div class="card">
+      <div class="sec">🔎 Modo de análise</div>
+      <div class="modesw">
+        <button id="mode-auto" class="on" onclick="setMode('auto')">Automático (API)</button>
+        <button id="mode-manual" onclick="setMode('manual')">Manual (digitar)</button>
+      </div>
+      <div id="status-line" class="note"></div>
+    </div>
+
+    <!-- AUTO -->
+    <div id="box-auto" class="card">
+      <div class="sec">⚽ Buscar jogo</div>
+      <div class="fg">
+        <label>Campeonato</label>
+        <select id="league"></select>
+      </div>
+      <div class="grid2">
+        <div class="fg"><label>Time da casa</label><input id="homeTeam" placeholder="Ex: Flamengo"></div>
+        <div class="fg"><label>Time visitante</label><input id="awayTeam" placeholder="Ex: Palmeiras"></div>
+      </div>
+      <button class="go" onclick="analyzeAuto()">⚡ Buscar e analisar</button>
+      <div class="note">Puxa tabela, gols, vitórias/derrotas e escanteios automaticamente. Cada análise gasta requisições da API-Football (tier grátis = 100/dia).</div>
+    </div>
+
+    <!-- MANUAL -->
+    <div id="box-manual" class="card" style="display:none">
+      <div class="sec">✍ Dados do jogo (manual — não gasta API)</div>
+      <div class="fg"><label>Campeonato</label><select id="league-m"></select></div>
+      <div class="grid2">
+        <div class="fg"><label>Time da casa</label><input id="m-homeTeam" placeholder="Casa"></div>
+        <div class="fg"><label>Time visitante</label><input id="m-awayTeam" placeholder="Fora"></div>
+      </div>
+      <div class="grid3">
+        <div class="fg"><label>Pos. casa</label><input id="m-homePos" type="number" placeholder="3"></div>
+        <div class="fg"><label>Pos. visit.</label><input id="m-awayPos" type="number" placeholder="12"></div>
+        <div class="fg"><label>Rodadas feitas</label><input id="m-gp" type="number" placeholder="18"></div>
+      </div>
+      <div class="sec" style="margin-top:6px">Casa</div>
+      <div class="grid2">
+        <div class="fg"><label>Gols feitos</label><input id="m-hGF" type="number" placeholder="28"></div>
+        <div class="fg"><label>Gols sofridos</label><input id="m-hGA" type="number" placeholder="14"></div>
+        <div class="fg"><label>Vitórias</label><input id="m-hW" type="number" placeholder="10"></div>
+        <div class="fg"><label>Derrotas</label><input id="m-hL" type="number" placeholder="3"></div>
+      </div>
+      <div class="sec" style="margin-top:6px">Visitante</div>
+      <div class="grid2">
+        <div class="fg"><label>Gols feitos</label><input id="m-aGF" type="number" placeholder="22"></div>
+        <div class="fg"><label>Gols sofridos</label><input id="m-aGA" type="number" placeholder="20"></div>
+        <div class="fg"><label>Vitórias</label><input id="m-aW" type="number" placeholder="7"></div>
+        <div class="fg"><label>Derrotas</label><input id="m-aL" type="number" placeholder="6"></div>
+      </div>
+      <div class="sec" style="margin-top:6px">Escanteios (soma dos últimos 10 jogos)</div>
+      <div class="grid2">
+        <div class="fg"><label>Casa</label><input id="m-hC" type="number" placeholder="54"></div>
+        <div class="fg"><label>Visitante</label><input id="m-aC" type="number" placeholder="48"></div>
+      </div>
+      <button class="go" onclick="analyzeManual()">⚡ Analisar</button>
+    </div>
+
+    <div id="analyze-out"></div>
+  </div>
+
+  <!-- ============ ARBITRAGEM ============ -->
+  <div id="p-arb" class="panel">
+    <div class="card">
+      <div class="sec">📡 Scanner de surebets (odds reais)</div>
+      <div class="grid2">
+        <div class="fg"><label>Campeonato</label><select id="arb-league"></select></div>
+        <div class="fg"><label>Banca total (R$)</label><input id="arb-bank" type="number" value="1000"></div>
+      </div>
+      <button class="go" onclick="scanArb()">📡 Escanear casas agora</button>
+      <div class="note">Compara odds de 40+ casas e acha lucro garantido. Tier grátis = 500 créditos/mês.</div>
+    </div>
+
+    <div class="card">
+      <div class="sec">🧮 Calculadora manual de arbitragem</div>
+      <div class="note" style="margin-top:0;margin-bottom:10px">Cole as melhores odds que achar nas casas (2 ou 3 resultados).</div>
+      <div class="grid3">
+        <div class="fg"><label>Odd 1 (casa)</label><input id="ao1" type="number" step="0.01" placeholder="2.10"></div>
+        <div class="fg"><label>Odd 2 (empate)</label><input id="ao2" type="number" step="0.01" placeholder="3.40"></div>
+        <div class="fg"><label>Odd 3 (fora)</label><input id="ao3" type="number" step="0.01" placeholder="3.20"></div>
+      </div>
+      <div class="fg"><label>Banca total (R$)</label><input id="ao-bank" type="number" value="500"></div>
+      <button class="go" onclick="calcArbManual()">🧮 Calcular</button>
+      <div id="arb-manual-out" style="margin-top:10px"></div>
+    </div>
+
+    <div id="arb-out"></div>
+  </div>
+
+  <!-- ============ VALOR & BANCA ============ -->
+  <div id="p-value" class="panel">
+    <div class="card">
+      <div class="sec">💰 Motor de valor (modelo vs mercado)</div>
+      <div class="note" style="margin-top:0;margin-bottom:10px">Cruza a probabilidade do modelo com as odds reais das casas e mostra onde a casa <b>errou o preço</b> (EV positivo = vantagem sua). Usa as duas APIs.</div>
+      <div class="fg"><label>Campeonato</label><select id="v-league"></select></div>
+      <div class="grid2">
+        <div class="fg"><label>Time da casa</label><input id="v-home" placeholder="Ex: Flamengo"></div>
+        <div class="fg"><label>Time visitante</label><input id="v-away" placeholder="Ex: Palmeiras"></div>
+      </div>
+      <div class="fg"><label>Banca total (R$)</label><input id="v-bank" type="number" value="1000"></div>
+      <button class="go" onclick="valueAuto()">💰 Buscar valor no mercado</button>
+    </div>
+    <div id="value-out"></div>
+
+    <div class="card">
+      <div class="sec">🧮 Calculadora de valor manual</div>
+      <div class="note" style="margin-top:0;margin-bottom:10px">Pegue a probabilidade do modelo (aba Análise) e a odd oferecida pela casa.</div>
+      <div class="grid3">
+        <div class="fg"><label>Sua prob. (%)</label><input id="vm-prob" type="number" step="0.1" placeholder="55"></div>
+        <div class="fg"><label>Odd da casa</label><input id="vm-odd" type="number" step="0.01" placeholder="2.10"></div>
+        <div class="fg"><label>Banca (R$)</label><input id="vm-bank" type="number" value="1000"></div>
+      </div>
+      <button class="go" onclick="valueManual()">🧮 Calcular EV</button>
+      <div id="vm-out" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="sec">📒 Diário de banca</div>
+      <div id="bank-summary"></div>
+      <div class="note" style="margin:8px 0">Registre suas apostas pra acompanhar lucro, ROI e taxa de acerto. Fica salvo no seu aparelho.</div>
+      <div class="grid2">
+        <div class="fg"><label>Jogo / descrição</label><input id="b-desc" placeholder="Flamengo x Palmeiras"></div>
+        <div class="fg"><label>Mercado</label><input id="b-market" placeholder="Over 2.5 / Vitória..."></div>
+      </div>
+      <div class="grid3">
+        <div class="fg"><label>Odd</label><input id="b-odd" type="number" step="0.01" placeholder="1.90"></div>
+        <div class="fg"><label>Valor apostado (R$)</label><input id="b-stake" type="number" placeholder="50"></div>
+        <div class="fg"><label>Resultado</label>
+          <select id="b-result"><option value="pending">Pendente</option><option value="win">Ganhou</option><option value="loss">Perdeu</option><option value="void">Anulada</option></select>
+        </div>
+      </div>
+      <button class="go" onclick="addBet()">+ Adicionar ao diário</button>
+      <div id="bank-list" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ============ GUIA ============ -->
+  <div id="p-guide" class="panel guide">
+    <div class="card">
+      <div class="sec">📘 Como usar</div>
+      <h3>Modo Automático</h3>
+      <p>Escolha a liga, digite os dois times e clique em analisar. O sistema busca os dados reais (tabela, gols, forma, escanteios) e calcula o melhor mercado.</p>
+      <h3>Modo Manual</h3>
+      <p>Não depende de API e não gasta requisição. Você digita os números do jogo e o modelo calcula igual. Bom pra economizar no tier grátis ou pra ligas sem cobertura.</p>
+      <h3>Aposta de valor (+EV) — o coração do lucro</h3>
+      <p>É onde está a vantagem real e legal: quando o SEU modelo diz que a chance é maior do que a odd da casa sugere. Fórmula: <span class="pill">EV = (prob. do modelo × odd) − 1</span>. Se der positivo, a casa pagou mais do que o justo — repetido centenas de vezes, vira lucro estatístico. Não é hack, é o mesmo que fazem os apostadores profissionais (sharps).</p>
+      <h3>Arbitragem (surebet)</h3>
+      <p>Existe surebet quando <span class="pill">1/odd1 + 1/odd2 + 1/odd3 &lt; 1.0</span>. O lucro é garantido independente do resultado, distribuindo a banca proporcionalmente entre as casas. Obs: as casas limitam/banem contas que abusam disso — é legal, mas use com cabeça.</p>
+      <h3>Diário de banca</h3>
+      <p>Registrar toda aposta e acompanhar ROI é o que separa quem lucra de quem quebra. Disciplina de banca vale mais que palpite. Os dados ficam salvos só no seu aparelho.</p>
+      <h3>O modelo</h3>
+      <p>Distribuição de Poisson + força de ataque/defesa de cada time, ajuste de mando de campo (+10%), pressão de tabela (briga por título/rebaixamento) e forma recente. Daí saem as probabilidades de cada mercado.</p>
+      <h3>Kelly Criterion</h3>
+      <p>Sugere quanto da banca apostar: <span class="pill">f = (b·p − q) / b</span>, com ½ Kelly e teto de 15% por segurança.</p>
+      <div class="disc">Análise estatística reduz o risco, mas não elimina a incerteza. Nenhum modelo garante lucro em apostas. Aposte com responsabilidade e só o que puder perder.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let CONFIG = { leagues: [], hasFootballKey:false, hasOddsKey:false };
+let MODE = 'auto';
+
+// ---------- init ----------
+async function init(){
+  try{
+    const r = await fetch('/api/config'); CONFIG = await r.json();
+  }catch(e){ CONFIG = {leagues:[],hasFootballKey:false,hasOddsKey:false}; }
+  const opts = CONFIG.leagues.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
+  $('league').innerHTML = opts;
+  $('league-m').innerHTML = opts;
+  $('v-league').innerHTML = opts;
+  $('arb-league').innerHTML = CONFIG.leagues.map(l=>`<option value="${l.oddsKey}">${l.name}</option>`).join('');
+  renderBank();
+  // status line
+  if(!CONFIG.hasFootballKey){
+    $('status-line').innerHTML = '⚠ A chave da API-Football não está configurada no servidor — use o modo <b>Manual</b> ou configure (veja o Guia/README). ';
+    setMode('manual');
+  } else {
+    try{
+      const s = await (await fetch('/api/status')).json();
+      if(s.ok){ $('status-line').innerHTML = `✅ API conectada · requisições restantes hoje: <b>${s.remaining ?? '—'}</b>`; }
+    }catch(e){}
+  }
+}
+
+// ---------- tabs ----------
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  t.classList.add('active');
+  $('p-'+t.dataset.tab).classList.add('active');
+});
+function setMode(m){
+  MODE = m;
+  $('mode-auto').classList.toggle('on', m==='auto');
+  $('mode-manual').classList.toggle('on', m==='manual');
+  $('box-auto').style.display = m==='auto'?'block':'none';
+  $('box-manual').style.display = m==='manual'?'block':'none';
+}
+
+// ---------- helpers de UI ----------
+const pct = v => Math.round(v*100);
+const stars = v => '★'.repeat(Math.round(v*5)) + '☆'.repeat(5-Math.round(v*5));
+function bar(label,val,color){
+  return `<div class="bar"><div class="bar-t"><span style="color:var(--dim2)">${label}</span>
+    <span style="color:${color};font-weight:700">${pct(val)}%</span></div>
+    <div class="bar-bg"><div class="bar-f" style="width:${pct(val)}%;background:linear-gradient(90deg,${color}60,${color})"></div></div></div>`;
+}
+function loadingBox(msg){ return `<div class="loading"><div class="spin"></div><div>${msg}</div></div>`; }
+
+// ---------- análise ----------
+async function analyzeAuto(){
+  const leagueId = $('league').value;
+  const homeTeam = $('homeTeam').value.trim();
+  const awayTeam = $('awayTeam').value.trim();
+  if(!homeTeam || !awayTeam){ $('analyze-out').innerHTML = '<div class="err">Preencha os dois times.</div>'; return; }
+  $('analyze-out').innerHTML = loadingBox('Buscando dados reais de '+homeTeam+' e '+awayTeam+'...');
+  try{
+    const r = await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({leagueId,homeTeam,awayTeam})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro na análise.');
+    renderAnalysis(d.analysis, d.season ? `Temporada ${d.season} · dados reais` : 'dados reais');
+  }catch(e){ $('analyze-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+async function analyzeManual(){
+  const body = {
+    leagueId: $('league-m').value,
+    homeTeam: $('m-homeTeam').value.trim(), awayTeam: $('m-awayTeam').value.trim(),
+    homePosition: $('m-homePos').value, awayPosition: $('m-awayPos').value, gamesPlayed: $('m-gp').value,
+    homeGoalsFor: $('m-hGF').value, homeGoalsAgainst: $('m-hGA').value, homeWins: $('m-hW').value, homeLosses: $('m-hL').value,
+    awayGoalsFor: $('m-aGF').value, awayGoalsAgainst: $('m-aGA').value, awayWins: $('m-aW').value, awayLosses: $('m-aL').value,
+    homeCorners10: $('m-hC').value, awayCorners10: $('m-aC').value,
+  };
+  $('analyze-out').innerHTML = loadingBox('Calculando...');
+  try{
+    const r = await fetch('/api/analyze-manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro.');
+    renderAnalysis(d.analysis, 'dados manuais');
+  }catch(e){ $('analyze-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+function renderAnalysis(a, source){
+  const p = a.probs, c = a.corners;
+  const medal = ['#00ff88','#90ee90','#4a7c5c','#2a4a3a','#2a4a3a','#2a4a3a'];
+  $('analyze-out').innerHTML = `
+    <div class="topbet">
+      <div class="tb-lbl">⚡ MELHOR APOSTA — ${a.league.toUpperCase()}</div>
+      <div class="tb-bet">${a.top.label}</div>
+      <div class="tb-desc">${a.top.desc} · mercado: ${a.top.market}</div>
+      <div class="metrics">
+        <div class="metric"><div class="m-v">${pct(a.top.prob)}%</div><div class="m-l">CONFIANÇA</div></div>
+        <div class="metric"><div class="m-v y" style="font-size:14px">${stars(a.top.prob)}</div><div class="m-l">RATING</div></div>
+        <div class="metric"><div class="m-v b">${pct(a.kelly)}%</div><div class="m-l">KELLY DA BANCA</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec">⚽ Mercado de gols</div>
+      <div class="note" style="margin-top:0;margin-bottom:10px">λ casa ${a.lambdaHome.toFixed(2)} · λ fora ${a.lambdaAway.toFixed(2)} gols esperados</div>
+      ${bar('Vitória '+a.home.teamName, p.pH, 'var(--green)')}
+      ${bar('Empate', p.pD, 'var(--yellow)')}
+      ${bar('Vitória '+a.away.teamName, p.pA, 'var(--red)')}
+      <div style="border-top:1px solid var(--line);margin:10px 0 8px"></div>
+      ${bar('Over 2.5 Gols', p.pO25, 'var(--blue)')}
+      ${bar('Under 2.5 Gols', p.pU25, 'var(--purple)')}
+      ${bar('Ambos Marcam', p.pBs, 'var(--orange)')}
+    </div>
+
+    <div class="card">
+      <div class="sec">🚩 Mercado de escanteios</div>
+      <div class="note" style="margin-top:0;margin-bottom:10px">Média esperada: ${c.lambda.toFixed(1)} escanteios/jogo</div>
+      ${bar('Over 8.5', c.o85, 'var(--green)')}
+      ${bar('Under 8.5', c.u85, 'var(--red)')}
+      ${bar('Over 9.5', c.o95, 'var(--blue)')}
+      ${bar('Over 10.5', c.o105, 'var(--orange)')}
+    </div>
+
+    <div class="card">
+      <div class="sec">🏆 Ranking de oportunidades</div>
+      ${a.bets.map((b,i)=>`
+        <div class="rank ${i===0?'top':''}">
+          <div class="badge" style="background:${medal[i]||'#2a4a3a'}">${i+1}</div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:700">${b.label}</div>
+            <div style="font-size:10px;color:var(--dim)">${b.desc}</div></div>
+          <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:${medal[i]||'#2a4a3a'}">${pct(b.prob)}%</div>
+            <div style="font-size:9px;color:var(--dim)">confiança</div></div>
+        </div>`).join('')}
+    </div>
+    <div class="disc">${source} · Modelo Poisson/Dixon-Coles. Probabilístico, não garante ganho. Aposte com responsabilidade.</div>
+  `;
+}
+
+// ---------- arbitragem ----------
+async function scanArb(){
+  if(!CONFIG.hasOddsKey){ $('arb-out').innerHTML = '<div class="err">A chave da The Odds API não está configurada no servidor. Use a calculadora manual abaixo ou veja o README.</div>'; return; }
+  const sport = $('arb-league').value;
+  const bank = parseFloat($('arb-bank').value)||1000;
+  $('arb-out').innerHTML = loadingBox('Escaneando odds de 40+ casas...');
+  try{
+    const r = await fetch(`/api/arbitrage?sport=${encodeURIComponent(sport)}&bankroll=${bank}`);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro no scan.');
+    if(!d.surebets.length){
+      $('arb-out').innerHTML = `<div class="card"><div class="sec">📡 Resultado</div>
+        <p class="note" style="margin-top:0">Nenhuma surebet nos ${d.scanned} jogos escaneados. Surebets são raras — o mercado está bem precificado. Tente outra liga ou mais tarde.${d.remaining!=null?` · Créditos restantes: ${d.remaining}`:''}</p></div>`;
+      return;
+    }
+    $('arb-out').innerHTML = `<div class="ok">🔥 ${d.surebets.length} surebet(s) em ${d.scanned} jogos${d.remaining!=null?` · créditos restantes: ${d.remaining}`:''}</div>` +
+      d.surebets.map(sb=>`
+        <div class="card">
+          <div style="font-size:13px;font-weight:700">${sb.game}</div>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:10px">${new Date(sb.commence).toLocaleString('pt-BR')}</div>
+          <div class="arb-card arb-yes" style="display:flex;justify-content:space-between">
+            <div><div style="font-size:10px;color:var(--dim)">Lucro garantido</div>
+              <div style="font-size:18px;font-weight:700;color:var(--green)">${sb.profitPct.toFixed(2)}%</div></div>
+            <div style="text-align:right"><div style="font-size:10px;color:var(--dim)">Em R$ ${sb.stakes.reduce((a,s)=>a+s.stake,0).toFixed(0)}</div>
+              <div style="font-size:18px;font-weight:700;color:var(--green)">R$ ${sb.guaranteedProfit.toFixed(2)}</div></div>
+          </div>
+          ${sb.stakes.map(s=>`<div class="stake-row"><div><div style="font-weight:700">${s.name}</div>
+            <div style="color:var(--dim);font-size:10px">${s.bookmaker} · odd ${s.odd.toFixed(2)}</div></div>
+            <div style="font-weight:700;color:var(--green)">R$ ${s.stake.toFixed(2)}</div></div>`).join('')}
+        </div>`).join('');
+  }catch(e){ $('arb-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+async function calcArbManual(){
+  const odds = [$('ao1').value,$('ao2').value,$('ao3').value].map(Number).filter(x=>x>1);
+  const bank = parseFloat($('ao-bank').value)||500;
+  if(odds.length<2){ $('arb-manual-out').innerHTML = '<div class="err">Informe pelo menos 2 odds (&gt; 1.00).</div>'; return; }
+  try{
+    const r = await fetch('/api/arbitrage-manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({odds,bankroll:bank})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro.');
+    const labels = ['Resultado 1','Resultado 2','Resultado 3'];
+    $('arb-manual-out').innerHTML = `
+      <div class="arb-card ${d.isArb?'arb-yes':'arb-no'}">
+        <div style="font-size:13px;font-weight:700;color:${d.isArb?'var(--green)':'var(--yellow)'}">${d.isArb?'✅ SUREBET DETECTADA!':'Sem arbitragem nessas odds'}</div>
+        <div class="note" style="margin-top:4px">Soma das probabilidades implícitas: ${(d.impliedSum*100).toFixed(2)}% ${d.isArb?'(&lt;100% = lucro garantido)':'(&gt;100% = sem edge)'}</div>
+        ${d.isArb?`<div style="font-size:12px;color:var(--green);margin-top:4px">Lucro: ${d.profitPct.toFixed(2)}% = R$ ${d.guaranteedProfit.toFixed(2)}</div>`:''}
+      </div>
+      ${d.stakes.map((s,i)=>`<div class="stake-row"><span>${labels[i]} · odd ${s.odd.toFixed(2)}</span>
+        <span style="font-weight:700">Apostar R$ ${s.stake.toFixed(2)}</span></div>`).join('')}
+      ${d.isArb?`<div class="note">Retorno em qualquer resultado: R$ ${d.payoutPerOutcome.toFixed(2)}</div>`:''}`;
+  }catch(e){ $('arb-manual-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+// ---------- VALOR (modelo vs mercado) ----------
+async function valueAuto(){
+  if(!CONFIG.hasOddsKey || !CONFIG.hasFootballKey){
+    $('value-out').innerHTML = '<div class="err">O motor de valor precisa das DUAS chaves configuradas no servidor (API-Football + The Odds API). Sem elas, use a calculadora manual abaixo.</div>'; return;
+  }
+  const leagueId=$('v-league').value, homeTeam=$('v-home').value.trim(), awayTeam=$('v-away').value.trim();
+  const bankroll=parseFloat($('v-bank').value)||1000;
+  if(!homeTeam||!awayTeam){ $('value-out').innerHTML='<div class="err">Preencha os dois times.</div>'; return; }
+  $('value-out').innerHTML = loadingBox('Cruzando modelo com odds reais de '+homeTeam+' x '+awayTeam+'...');
+  try{
+    const r=await fetch('/api/value',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({leagueId,homeTeam,awayTeam,bankroll})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro.');
+    if(!d.matched){ $('value-out').innerHTML = `<div class="ok">${d.message}</div>`; renderAnalysis(d.analysis,'dados reais'); return; }
+    const rows = d.valueRows.map(v=>{
+      const col = v.isValue?'var(--green)':'var(--dim2)';
+      return `<div class="rank ${v.isValue?'top':''}">
+        <div style="flex:1"><div style="font-size:12px;font-weight:700">${v.label}</div>
+          <div style="font-size:10px;color:var(--dim)">${v.bookmaker} · odd ${v.marketOdd.toFixed(2)} · justa ${v.fairOdd.toFixed(2)}</div></div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:700;color:${col}">${v.evPct>=0?'+':''}${v.evPct.toFixed(1)}% EV</div>
+          <div style="font-size:10px;color:var(--dim)">${v.isValue?('apostar R$ '+v.suggestedStake.toFixed(2)):'sem valor'}</div></div>
+      </div>`;
+    }).join('');
+    const bv = d.bestValue;
+    $('value-out').innerHTML = `
+      ${bv?`<div class="topbet"><div class="tb-lbl">💰 MELHOR VALOR — ${d.game.toUpperCase()}</div>
+        <div class="tb-bet">${bv.label}</div>
+        <div class="tb-desc">${bv.bookmaker} paga ${bv.marketOdd.toFixed(2)} · justo seria ${bv.fairOdd.toFixed(2)}</div>
+        <div class="metrics">
+          <div class="metric"><div class="m-v">+${bv.evPct.toFixed(1)}%</div><div class="m-l">VANTAGEM (EV)</div></div>
+          <div class="metric"><div class="m-v y">${pct(bv.modelProb)}%</div><div class="m-l">PROB. MODELO</div></div>
+          <div class="metric"><div class="m-v b">R$ ${bv.suggestedStake.toFixed(0)}</div><div class="m-l">STAKE (KELLY)</div></div>
+        </div></div>`:`<div class="arb-card arb-no" style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;color:var(--yellow)">Nenhuma aposta de valor positivo agora</div><div class="note" style="margin-top:4px">O mercado está bem precificado nesse jogo. Sem EV+ não há vantagem — melhor não apostar.</div></div>`}
+      <div class="card"><div class="sec">📊 Modelo vs mercado${d.remaining!=null?` · créditos: ${d.remaining}`:''}</div>${rows}</div>
+      <div class="disc">EV = (prob. do modelo × odd) − 1. Positivo = a casa pagou mais que o justo. Aposte com responsabilidade.</div>`;
+  }catch(e){ $('value-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+async function valueManual(){
+  const prob=(parseFloat($('vm-prob').value)||0)/100, odd=parseFloat($('vm-odd').value)||0, bankroll=parseFloat($('vm-bank').value)||1000;
+  if(!(prob>0&&prob<1)){ $('vm-out').innerHTML='<div class="err">Probabilidade entre 0 e 100%.</div>'; return; }
+  if(!(odd>1)){ $('vm-out').innerHTML='<div class="err">Odd deve ser maior que 1.00.</div>'; return; }
+  try{
+    const r=await fetch('/api/value-manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prob,odd,bankroll})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro.');
+    $('vm-out').innerHTML = `
+      <div class="arb-card ${d.isValue?'arb-yes':'arb-no'}">
+        <div style="font-size:13px;font-weight:700;color:${d.isValue?'var(--green)':'var(--yellow)'}">${d.isValue?`✅ TEM VALOR · +${d.evPct.toFixed(1)}% EV`:`Sem valor · ${d.evPct.toFixed(1)}% EV`}</div>
+        <div class="note" style="margin-top:4px">Odd justa: ${d.fairOdd.toFixed(2)} · a casa paga ${odd.toFixed(2)} (prob. implícita ${pct(d.impliedProb)}%)</div>
+        ${d.isValue?`<div style="font-size:12px;color:var(--green);margin-top:4px">Stake sugerida (½ Kelly): R$ ${d.suggestedStake.toFixed(2)} (${pct(d.kelly)}% da banca)</div>`:`<div class="note">EV negativo: apostar aqui perde dinheiro no longo prazo.</div>`}
+      </div>`;
+  }catch(e){ $('vm-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+// ---------- DIÁRIO DE BANCA (localStorage) ----------
+function getBets(){ try{ return JSON.parse(localStorage.getItem('bap_bets')||'[]'); }catch(e){ return []; } }
+function saveBets(b){ localStorage.setItem('bap_bets', JSON.stringify(b)); }
+function addBet(){
+  const desc=$('b-desc').value.trim(), market=$('b-market').value.trim();
+  const odd=parseFloat($('b-odd').value)||0, stake=parseFloat($('b-stake').value)||0, result=$('b-result').value;
+  if(!desc||!(odd>1)||!(stake>0)){ alert('Preencha jogo, odd (>1) e valor apostado.'); return; }
+  const bets=getBets();
+  bets.unshift({ id:Date.now(), desc, market, odd, stake, result, date:new Date().toISOString() });
+  saveBets(bets);
+  $('b-desc').value=''; $('b-market').value=''; $('b-odd').value=''; $('b-stake').value=''; $('b-result').value='pending';
+  renderBank();
+}
+function setResult(id,res){ const b=getBets().map(x=>x.id===id?{...x,result:res}:x); saveBets(b); renderBank(); }
+function delBet(id){ saveBets(getBets().filter(x=>x.id!==id)); renderBank(); }
+function renderBank(){
+  const bets=getBets();
+  let staked=0, ret=0, settled=0, wins=0;
+  for(const b of bets){
+    if(b.result==='void') continue;
+    if(b.result==='win'||b.result==='loss'){ staked+=b.stake; settled++; if(b.result==='win'){ ret+=b.stake*b.odd; wins++; } }
+  }
+  const profit=ret-staked, roi=staked>0?profit/staked*100:0, hit=settled>0?wins/settled*100:0;
+  const pc = profit>=0?'var(--green)':'var(--red)';
+  $('bank-summary').innerHTML = `<div class="metrics">
+    <div class="metric"><div class="m-v" style="color:${pc}">${profit>=0?'+':''}R$ ${profit.toFixed(2)}</div><div class="m-l">LUCRO/PREJUÍZO</div></div>
+    <div class="metric"><div class="m-v" style="color:${roi>=0?'var(--green)':'var(--red)'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="m-l">ROI</div></div>
+    <div class="metric"><div class="m-v y">${hit.toFixed(0)}%</div><div class="m-l">ACERTO (${wins}/${settled})</div></div>
+  </div>`;
+  if(!bets.length){ $('bank-list').innerHTML='<div class="note" style="text-align:center">Nenhuma aposta registrada ainda.</div>'; return; }
+  const tag={pending:['Pendente','var(--blue)'],win:['Ganhou','var(--green)'],loss:['Perdeu','var(--red)'],void:['Anulada','var(--dim)']};
+  $('bank-list').innerHTML = bets.map(b=>{
+    const [tl,tc]=tag[b.result]||tag.pending;
+    return `<div class="rank">
+      <div style="flex:1"><div style="font-size:12px;font-weight:700">${b.desc}</div>
+        <div style="font-size:10px;color:var(--dim)">${b.market||'—'} · odd ${b.odd.toFixed(2)} · R$ ${b.stake.toFixed(2)} · <span style="color:${tc}">${tl}</span></div>
+        ${b.result==='pending'?`<div style="margin-top:6px;display:flex;gap:6px">
+          <button class="ghost" style="margin:0;padding:5px 10px;width:auto;font-size:11px;color:var(--green)" onclick="setResult(${b.id},'win')">Ganhou</button>
+          <button class="ghost" style="margin:0;padding:5px 10px;width:auto;font-size:11px;color:var(--red)" onclick="setResult(${b.id},'loss')">Perdeu</button>
+        </div>`:''}
+      </div>
+      <button class="ghost" style="margin:0;padding:6px 10px;width:auto;font-size:11px" onclick="delBet(${b.id})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+init();
+</script>
+</body>
+</html>
