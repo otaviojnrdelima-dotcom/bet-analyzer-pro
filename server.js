@@ -43,6 +43,9 @@ const LEAGUES = {
   "78":  { name: "Bundesliga",          teams: 18, totalGames: 34, avgGoals: 3.18, avgCorners: 10.3, oddsKey: "soccer_germany_bundesliga",defaultSeason: 2024 },
   "135": { name: "Serie A (Itália)",    teams: 20, totalGames: 38, avgGoals: 2.67, avgCorners: 9.4,  oddsKey: "soccer_italy_serie_a",     defaultSeason: 2024 },
   "61":  { name: "Ligue 1",             teams: 18, totalGames: 34, avgGoals: 2.71, avgCorners: 9.6,  oddsKey: "soccer_france_ligue_one",  defaultSeason: 2024 },
+  "72":  { name: "Brasileirão Série B",  teams: 20, totalGames: 38, avgGoals: 2.30, avgCorners: 9.0,  oddsKey: "soccer_brazil_serie_b",     defaultSeason: 2024 },
+  "13":  { name: "Copa Libertadores",   teams: 32, totalGames: 13, avgGoals: 2.50, avgCorners: 9.5,  oddsKey: "soccer_conmebol_copa_libertadores", defaultSeason: 2024 },
+  "11":  { name: "Copa Sudamericana",   teams: 32, totalGames: 13, avgGoals: 2.50, avgCorners: 9.3,  oddsKey: "soccer_conmebol_copa_sudamericana", defaultSeason: 2024 },
 };
 
 // ───────────────────────── CACHE EM MEMÓRIA ────────────────────────────────
@@ -703,7 +706,7 @@ app.get("/api/now", async (req, res) => {
   if (!ODDS_API_KEY) return res.status(400).json({ error: "ODDS_API_KEY não configurada no servidor. Veja o README." });
   const sport = req.query.sport || "soccer_brazil_campeonato";
   const bankroll = parseFloat(req.query.bankroll) || 1000;
-  const hours = parseFloat(req.query.hours) || 72;
+  const hours = parseFloat(req.query.hours) || 336; // 14 dias — pega a próxima rodada
   const regions = req.query.regions || "eu,uk";
   try {
     const { games, remaining } = await fetchOdds(sport, regions, "h2h");
@@ -791,7 +794,7 @@ app.get("/api/auto-pick", async (req, res) => {
   try {
     const { games, remaining } = await fetchOdds(lg.oddsKey, regions, "h2h");
     const now = Date.now();
-    const horizon = now + 72 * 3600 * 1000;
+    const horizon = now + 336 * 3600 * 1000; // 14 dias
     const inWindow = games.filter(g => {
       const t = new Date(g.commence_time).getTime();
       return t >= now - 2 * 3600 * 1000 && t <= horizon;
