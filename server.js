@@ -929,6 +929,51 @@ app.get("/api/auto-pick", async (req, res) => {
   }
 });
 
+// RADAR DE BRECHAS: monta a linha justa (devig da casa sharp) e varre TODAS as
+// casas procurando onde alguma paga acima do justo (valor +EV). A "contra-
+// probabilidade" operando nas ineficiências de preço — tudo legal, só odds.
+app.get("/api/gaps", async (req, res) => {
+  if (!ODDS_API_KEY) return res.status(400).json({ error: "ODDS_API_KEY não configurada no servidor." });
+  const sport = req.query.sport || "soccer_brazil_campeonato";
+  const bankroll = parseFloat(req.query.bankroll) || 1000;
+  const minEv = (parseFloat(req.query.minEv) || 3) / 100; // limiar de EV (default 3%)
+  const regions = req.query.regions || "eu,uk";
+  try {
+    const { games, remaining } = await fetchOdds(sport, regions, "h2h");
+    const now = Date.now();
+    const horizon = now + 336 * 3600 * 1000;
+    const rows = [];
+    for (const g of games) {
+      const t = new Date(g.commence_time).getTime();
+      if (t < now - 2 * 3600 * 1000 || t > horizon) continue;
+      const sharp = sharpFairProbs(g);
+      if (!sharp) continue;
+      for (const bk of (g.bookmakers || [])) {
+        const h2h = (bk.markets || []).find(m => m.key === "h2h");
+        if (!h2h) continue;
+        for (const o of (h2h.outcomes || [])) {
+          const fair = sharp.probs[o.name];
+          if (fair == null || !(o.price > 1)) continue;
+          const ev = o.price * fair - 1;
+          if (ev >= minEv) {
+            const k = valueKelly(fair, o.price);
+            rows.push({
+              game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
+              outcome: o.name, bookmaker: bk.title, odd: o.price,
+              fairProb: fair, fairOdd: 1 / fair, evPct: ev * 100,
+              stake: Math.round(k * bankroll * 100) / 100, sharpBook: sharp.book,
+            });
+          }
+        }
+      }
+    }
+    rows.sort((a, b) => b.evPct - a.evPct);
+    res.json({ ok: true, remaining, count: rows.length, minEvPct: minEv * 100, gaps: rows.slice(0, 40) });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ─────────────────────── STATIC (frontend) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, "public")));
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
