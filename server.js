@@ -83,6 +83,35 @@ function calcProbs(lH, lA) {
   }
   return { pH, pD, pA, pO25, pU25: 1 - pO25, pBs };
 }
+// ── DIXON-COLES (corrige a correlação de placares baixos do Poisson puro) ──
+function dcTau(h, a, lH, lA, rho) {
+  if (h === 0 && a === 0) return 1 - lH * lA * rho;
+  if (h === 0 && a === 1) return 1 + lH * rho;
+  if (h === 1 && a === 0) return 1 + lA * rho;
+  if (h === 1 && a === 1) return 1 - rho;
+  return 1;
+}
+function calcProbsDC(lH, lA, rho = -0.13) {
+  const M = 10;
+  let total = 0; const m = [];
+  for (let h = 0; h <= M; h++) {
+    m[h] = [];
+    for (let a = 0; a <= M; a++) {
+      let p = poissonPMF(h, lH) * poissonPMF(a, lA) * dcTau(h, a, lH, lA, rho);
+      if (p < 0) p = 0;
+      m[h][a] = p; total += p;
+    }
+  }
+  let pH = 0, pD = 0, pA = 0, pO25 = 0, pBs = 0;
+  for (let h = 0; h <= M; h++) for (let a = 0; a <= M; a++) {
+    const p = m[h][a] / total;
+    if (h > a) pH += p; else if (h === a) pD += p; else pA += p;
+    if (h + a >= 3) pO25 += p;
+    if (h > 0 && a > 0) pBs += p;
+  }
+  return { pH, pD, pA, pO25, pU25: 1 - pO25, pBs };
+}
+
 function cornerProbs(homeCorners10, awayCorners10) {
   const l = (homeCorners10 + awayCorners10) / 10;
   return {
@@ -126,7 +155,7 @@ function runModel(leagueId, home, away) {
   const lH = lgAvg * homeAtt * awayDef * HOME_ADV * pressH;
   const lA = lgAvg * awayAtt * homeDef * (1 / HOME_ADV) * pressA;
 
-  const raw = calcProbs(lH, lA);
+  const raw = calcProbsDC(lH, lA);
   const formH = formScore(home.wins, home.losses, home.gp);
   const formA = formScore(away.wins, away.losses, away.gp);
   const aH = raw.pH * (0.7 + 0.3 * formH);
@@ -227,6 +256,44 @@ function teamsMatch(a, b) {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+// ── DEVIGGING: remove a margem das odds pra achar a probabilidade real ──────
+function devigMultiplicative(odds) {
+  const inv = odds.map(o => 1 / o);
+  const s = inv.reduce((a, b) => a + b, 0);
+  return inv.map(x => x / s);
+}
+// Método de Shin (1992): corrige o viés favorito-azarão melhor que a média.
+function devigShin(odds) {
+  const inv = odds.map(o => 1 / o);
+  const B = inv.reduce((a, b) => a + b, 0);
+  if (B <= 1) return devigMultiplicative(odds);
+  const q = z => inv.map(pi => (Math.sqrt(z * z + 4 * (1 - z) * pi * pi / B) - z) / (2 * (1 - z)));
+  const sumQ = z => q(z).reduce((a, b) => a + b, 0);
+  let lo = 0, hi = 0.5;
+  for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (sumQ(mid) > 1) lo = mid; else hi = mid; }
+  const z = (lo + hi) / 2;
+  const probs = q(z); const s = probs.reduce((a, b) => a + b, 0);
+  return probs.map(p => p / s);
+}
+// Probabilidade "justa" usando a casa mais eficiente (Pinnacle > Betfair > menor margem).
+function sharpFairProbs(game) {
+  let chosen = null, bestPriority = Infinity;
+  for (const bk of (game.bookmakers || [])) {
+    const h2h = (bk.markets || []).find(m => m.key === "h2h");
+    if (!h2h || !h2h.outcomes || h2h.outcomes.length < 2) continue;
+    const prices = h2h.outcomes.map(o => ({ name: o.name, price: o.price }));
+    const margin = prices.reduce((a, o) => a + 1 / o.price, 0) - 1;
+    const t = (bk.title || "").toLowerCase();
+    const priority = t.includes("pinnacle") ? -2 : (t.includes("betfair") || t.includes("smarkets")) ? -1 : margin;
+    if (priority < bestPriority) { bestPriority = priority; chosen = { title: bk.title, prices, margin }; }
+  }
+  if (!chosen) return null;
+  const fair = devigShin(chosen.prices.map(p => p.price));
+  const probs = {};
+  chosen.prices.forEach((p, i) => probs[p.name] = fair[i]);
+  return { book: chosen.title, margin: chosen.margin, probs };
+}
+
 // ───────────────────── HELPERS API-FOOTBALL ────────────────────────────────
 async function af(pathAndQuery) {
   // A "API-Football" existe em 2 provedores. Tentamos o direto (api-sports.io)
@@ -270,12 +337,28 @@ async function fetchTeamStats(teamName, leagueId, season) {
   const cached = cacheGet(key);
   if (cached) return cached;
 
-  const search = await af(`/teams?search=${encodeURIComponent(teamName)}&league=${leagueId}&season=${season}`);
-  if (!search.response || !search.response.length) {
-    throw new Error(`Time "${teamName}" não encontrado nessa liga/temporada. Confira o nome (ex: "Flamengo", "Man United").`);
+  // Busca o time tentando várias formas (a casa de odds e a API-Football
+  // às vezes usam nomes diferentes). 1) com liga/temporada; 2) global;
+  // 3) só a palavra mais significativa do nome.
+  const clean = teamName.replace(/\b(fc|cf|sc|ac|ec|club|clube|as|ss|ssc|cd|rc)\b/gi, "").trim();
+  const bigWord = clean.split(/\s+/).sort((a, b) => b.length - a.length)[0] || clean;
+  const tries = [
+    `/teams?search=${encodeURIComponent(teamName)}&league=${leagueId}&season=${season}`,
+    `/teams?search=${encodeURIComponent(teamName)}`,
+    `/teams?search=${encodeURIComponent(clean)}`,
+    `/teams?search=${encodeURIComponent(bigWord)}`,
+  ];
+  let found = null;
+  for (const t of tries) {
+    if (!t.includes("search=") || t.endsWith("search=")) continue;
+    const s = await af(t);
+    if (s.response && s.response.length) { found = s.response[0]; break; }
   }
-  const teamId = search.response[0].team.id;
-  const teamNameReal = search.response[0].team.name;
+  if (!found) {
+    throw new Error(`Time "${teamName}" não encontrado na API-Football. Pode ser nome diferente ou temporada sem cobertura no plano grátis.`);
+  }
+  const teamId = found.team.id;
+  const teamNameReal = found.team.name;
 
   const stats = await af(`/teams/statistics?league=${leagueId}&season=${season}&team=${teamId}`);
   const s = stats.response;
@@ -588,10 +671,12 @@ app.get("/api/now", async (req, res) => {
         const ai = ps.reduce((a, p) => a + 1 / p, 0) / ps.length;
         avgImplied[n] = ai; sumAvg += ai;
       }
+      const sharp = sharpFairProbs(g); // prob justa via casa sharp (devig Shin)
+      const fairOf = n => (sharp && sharp.probs[n] != null) ? sharp.probs[n] : avgImplied[n] / sumAvg;
       const outcomes = names.map(n => {
-        const fair = avgImplied[n] / sumAvg;          // prob de consenso (sem margem)
+        const fair = fairOf(n);                        // prob justa (sharp devig ou consenso)
         const best = byOutcome[n].best;
-        const ev = best.price * fair - 1;             // valor vs consenso
+        const ev = best.price * fair - 1;              // valor: melhor odd vs linha justa
         const k = ev > 0 ? valueKelly(fair, best.price) : 0;
         return {
           name: n, bestOdd: best.price, bookmaker: best.bk,
@@ -605,6 +690,7 @@ app.get("/api/now", async (req, res) => {
         commence: g.commence_time,
         outcomes, best: outcomes[0],
         marginPct: (sumAvg - 1) * 100,
+        sharpBook: sharp ? sharp.book : null,
       };
     }).filter(Boolean).sort((a, b) => new Date(a.commence) - new Date(b.commence));
 
@@ -677,35 +763,71 @@ app.get("/api/auto-pick", async (req, res) => {
 
     const g = candidate.game;
 
-    // 3) análise REAL com o modelo Poisson (precisa da API-Football)
-    if (!API_FOOTBALL_KEY) {
-      return res.json({
-        ok: true, kind: "market-only", remaining,
-        game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
-        message: "Varredura de mercado pronta, mas a chave da API-Football não está configurada pra rodar o modelo completo.",
-      });
-    }
-    const [home, away] = await Promise.all([
-      fetchTeamStats(g.home_team, leagueId, season),
-      fetchTeamStats(g.away_team, leagueId, season),
-    ]);
-    const analysis = runModel(leagueId, home, away);
-    const { best } = bestOddsByOutcome(g);
-    const rows = [];
-    const push = (label, p, oddObj) => {
-      if (!oddObj || !(oddObj.price > 1)) return;
-      const ev = expectedValue(p, oddObj.price);
-      const k = ev > 0 ? valueKelly(p, oddObj.price) : 0;
-      rows.push({ label, modelProb: p, marketOdd: oddObj.price, bookmaker: oddObj.bk, fairOdd: fairOdd(p), evPct: ev * 100, isValue: ev > 0, kelly: k, suggestedStake: Math.round(k * bankroll * 100) / 100 });
+    // Sugestão de mercado (consenso) — sempre disponível, só com odds.
+    const marketPick = () => {
+      const byOutcome = {};
+      for (const bk of (g.bookmakers || [])) for (const mkt of (bk.markets || [])) {
+        if (mkt.key !== "h2h") continue;
+        for (const o of (mkt.outcomes || [])) {
+          if (!byOutcome[o.name]) byOutcome[o.name] = { prices: [], best: { price: 0, bk: "" } };
+          byOutcome[o.name].prices.push(o.price);
+          if (o.price > byOutcome[o.name].best.price) byOutcome[o.name].best = { price: o.price, bk: bk.title };
+        }
+      }
+      const names = Object.keys(byOutcome); let sum = 0; const avg = {};
+      for (const n of names) { const ps = byOutcome[n].prices; const ai = ps.reduce((a, p) => a + 1 / p, 0) / ps.length; avg[n] = ai; sum += ai; }
+      const sharp = sharpFairProbs(g);
+      const fairOf = n => (sharp && sharp.probs[n] != null) ? sharp.probs[n] : avg[n] / sum;
+      const outs = names.map(n => {
+        const fair = fairOf(n); const b = byOutcome[n].best; const ev = b.price * fair - 1;
+        const k = ev > 0 ? valueKelly(fair, b.price) : 0;
+        return { name: n, bestOdd: b.price, bookmaker: b.bk, consensusProb: fair, evPct: ev * 100, isValue: ev > 0, suggestedStake: Math.round(k * bankroll * 100) / 100 };
+      }).sort((a, b) => b.evPct - a.evPct);
+      return outs;
     };
-    push(`Vitória ${home.teamName}`, analysis.probs.pH, best[g.home_team]);
-    push("Empate", analysis.probs.pD, best["Draw"]);
-    push(`Vitória ${away.teamName}`, analysis.probs.pA, best[g.away_team]);
-    rows.sort((a, b) => b.evPct - a.evPct);
-    res.json({
-      ok: true, kind: "model", remaining,
+
+    // 3) análise REAL com o modelo Poisson (precisa da API-Football).
+    // Se a chave faltar ou o time não casar, cai na sugestão por odds.
+    if (API_FOOTBALL_KEY) {
+      try {
+        const [home, away] = await Promise.all([
+          fetchTeamStats(g.home_team, leagueId, season),
+          fetchTeamStats(g.away_team, leagueId, season),
+        ]);
+        const analysis = runModel(leagueId, home, away);
+        const { best } = bestOddsByOutcome(g);
+        const rows = [];
+        const push = (label, p, oddObj) => {
+          if (!oddObj || !(oddObj.price > 1)) return;
+          const ev = expectedValue(p, oddObj.price);
+          const k = ev > 0 ? valueKelly(p, oddObj.price) : 0;
+          rows.push({ label, modelProb: p, marketOdd: oddObj.price, bookmaker: oddObj.bk, fairOdd: fairOdd(p), evPct: ev * 100, isValue: ev > 0, kelly: k, suggestedStake: Math.round(k * bankroll * 100) / 100 });
+        };
+        push(`Vitória ${home.teamName}`, analysis.probs.pH, best[g.home_team]);
+        push("Empate", analysis.probs.pD, best["Draw"]);
+        push(`Vitória ${away.teamName}`, analysis.probs.pA, best[g.away_team]);
+        rows.sort((a, b) => b.evPct - a.evPct);
+        return res.json({
+          ok: true, kind: "model", remaining,
+          game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
+          analysis, valueRows: rows, bestValue: rows.find(r => r.isValue) || rows[0],
+        });
+      } catch (modelErr) {
+        const outs = marketPick();
+        return res.json({
+          ok: true, kind: "market", remaining,
+          game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
+          outcomes: outs, best: outs[0],
+          note: `Modelo não rodou (${modelErr.message}). Sugestão abaixo é pela comparação de odds entre as casas.`,
+        });
+      }
+    }
+    const outs = marketPick();
+    return res.json({
+      ok: true, kind: "market", remaining,
       game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
-      analysis, valueRows: rows, bestValue: rows.find(r => r.isValue) || rows[0],
+      outcomes: outs, best: outs[0],
+      note: "Chave da API-Football ausente — sugestão pela comparação de odds entre as casas.",
     });
   } catch (e) {
     res.status(502).json({ error: e.message });
