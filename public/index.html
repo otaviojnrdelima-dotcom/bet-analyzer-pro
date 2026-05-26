@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#060b10">
+<link rel="manifest" href="/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bet Analyzer">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <title>Bet Analyzer Pro</title>
 <style>
   :root{
@@ -425,6 +432,21 @@ function renderAnalysis(a, source){
       ${bar('Over 10.5', c.o105, 'var(--orange)')}
     </div>
 
+    ${a.markets?`
+    <div class="card">
+      <div class="sec">🎯 Mais mercados</div>
+      ${bar('Dupla chance 1X ('+a.home.teamName+' ou empate)', a.markets.doubleChance['1X'],'var(--green)')}
+      ${bar('Dupla chance 12 (um dos dois vence)', a.markets.doubleChance['12'],'var(--blue)')}
+      ${bar('Dupla chance X2 (empate ou '+a.away.teamName+')', a.markets.doubleChance['X2'],'var(--purple)')}
+      <div style="border-top:1px solid var(--line);margin:10px 0 8px"></div>
+      ${bar('Ambas marcam — Sim', a.markets.btts.yes,'var(--orange)')}
+      ${bar('Over 1.5 gols', a.markets.over['1.5'],'var(--green)')}
+      ${bar('Over 3.5 gols', a.markets.over['3.5'],'var(--blue)')}
+      ${bar(a.home.teamName+' marca +1.5', a.markets.teamTotals.homeOver15,'var(--green)')}
+      ${bar(a.away.teamName+' marca +1.5', a.markets.teamTotals.awayOver15,'var(--red)')}
+      <div style="font-size:10px;color:var(--dim);margin-top:10px">Placares mais prováveis: ${a.markets.topScores.map(s=>`<span class="pill">${s.score} · ${pct(s.prob)}%</span>`).join(' ')}</div>
+    </div>`:''}
+
     <div class="card">
       <div class="sec">🏆 Ranking de oportunidades</div>
       ${a.bets.map((b,i)=>`
@@ -436,7 +458,7 @@ function renderAnalysis(a, source){
             <div style="font-size:9px;color:var(--dim)">confiança</div></div>
         </div>`).join('')}
     </div>
-    <div class="disc">${source} · Modelo Poisson/Dixon-Coles. Probabilístico, não garante ganho. Aposte com responsabilidade.</div>
+    <div class="disc">${source} · Modelo ${(a.elo&&a.elo.used)?('Dixon-Coles + Elo '+a.elo.home+'/'+a.elo.away):'Dixon-Coles'}. Probabilístico, não garante ganho. Aposte com responsabilidade.</div>
   `;
 }
 

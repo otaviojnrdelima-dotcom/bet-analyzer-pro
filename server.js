@@ -115,6 +115,32 @@ function calcProbsDC(lH, lA, rho = -0.13) {
   return { pH, pD, pA, pO25, pU25: 1 - pO25, pBs };
 }
 
+// Mercados estendidos a partir da matriz Dixon-Coles (dupla chance, ambas
+// marcam, over/under em várias linhas, total por time, placares prováveis).
+function extendedMarkets(lH, lA, rho = -0.13) {
+  const M = 10; const mat = []; let total = 0;
+  for (let h = 0; h <= M; h++) { mat[h] = []; for (let a = 0; a <= M; a++) { let p = poissonPMF(h, lH) * poissonPMF(a, lA) * dcTau(h, a, lH, lA, rho); if (p < 0) p = 0; mat[h][a] = p; total += p; } }
+  let home = 0, draw = 0, away = 0, btts = 0, o15 = 0, o25 = 0, o35 = 0, hOver15 = 0, aOver15 = 0;
+  const scores = {};
+  for (let h = 0; h <= M; h++) for (let a = 0; a <= M; a++) {
+    const p = mat[h][a] / total;
+    if (h > a) home += p; else if (h === a) draw += p; else away += p;
+    if (h > 0 && a > 0) btts += p;
+    if (h + a > 1.5) o15 += p; if (h + a > 2.5) o25 += p; if (h + a > 3.5) o35 += p;
+    if (h > 1.5) hOver15 += p; if (a > 1.5) aOver15 += p;
+    const k = `${h}-${a}`; scores[k] = (scores[k] || 0) + p;
+  }
+  const topScores = Object.entries(scores).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([score, prob]) => ({ score, prob }));
+  return {
+    doubleChance: { "1X": home + draw, "12": home + away, "X2": draw + away },
+    btts: { yes: btts, no: 1 - btts },
+    over: { "1.5": o15, "2.5": o25, "3.5": o35 },
+    under: { "1.5": 1 - o15, "2.5": 1 - o25, "3.5": 1 - o35 },
+    teamTotals: { homeOver15: hOver15, awayOver15: aOver15 },
+    topScores,
+  };
+}
+
 function cornerProbs(homeCorners10, awayCorners10) {
   const l = (homeCorners10 + awayCorners10) / 10;
   return {
@@ -198,6 +224,7 @@ function runModel(leagueId, home, away) {
     allBets: bets,
     top, kelly,
     formH, formA,
+    markets: extendedMarkets(lH, lA),
   };
 }
 
