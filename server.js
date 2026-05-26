@@ -294,6 +294,65 @@ function sharpFairProbs(game) {
   return { book: chosen.title, margin: chosen.margin, probs };
 }
 
+// ── ELO (clubelo.com, grátis) + ENSEMBLE de modelos ────────────────────────
+async function getEloTable() {
+  const key = "clubelo:table";
+  const c = cacheGet(key);
+  if (c) return c;
+  const date = new Date().toISOString().slice(0, 10);
+  const r = await fetch(`http://api.clubelo.com/${date}`);
+  if (!r.ok) throw new Error(`clubelo ${r.status}`);
+  const txt = await r.text();
+  const lines = txt.trim().split("\n");
+  const header = lines.shift().split(",");
+  const ci = header.indexOf("Club"), ei = header.indexOf("Elo");
+  const table = lines.map(l => { const p = l.split(","); return { name: p[ci], elo: parseFloat(p[ei]) }; })
+    .filter(x => x.name && !isNaN(x.elo));
+  cacheSet(key, table, 12 * 60 * 60 * 1000);
+  return table;
+}
+async function getElo(teamName) {
+  try {
+    const table = await getEloTable();
+    let best = null;
+    for (const row of table) if (teamsMatch(row.name, teamName)) { if (!best || row.elo > best.elo) best = row; }
+    return best ? best.elo : null;
+  } catch (_) { return null; }
+}
+// Modelo baseado em Elo: converte a diferença de Elo (com mando) em gols esperados
+// e roda Dixon-Coles, pra ficar comparável ao modelo estatístico.
+function eloModel(eloH, eloA, avgGoals) {
+  const HFA = 65; // vantagem de mando em pontos de Elo
+  const dr = (eloH + HFA) - eloA;
+  const sup = (dr / 100) * 0.34; // ~0.34 gol de vantagem a cada 100 pts de Elo
+  const lH = Math.max(0.15, (avgGoals + sup) / 2);
+  const lA = Math.max(0.15, (avgGoals - sup) / 2);
+  return calcProbsDC(lH, lA);
+}
+// Combina o modelo estatístico (Dixon-Coles) com o de Elo. Se não houver Elo
+// do time (ex: clubes fora da cobertura), usa só o estatístico.
+async function withEnsemble(leagueId, analysis, home, away) {
+  const lg = LEAGUES[leagueId];
+  const [eloH, eloA] = await Promise.all([getElo(home.teamName), getElo(away.teamName)]);
+  if (eloH == null || eloA == null) {
+    return { probs: analysis.probs, elo: { home: eloH, away: eloA, used: false } };
+  }
+  const eloP = eloModel(eloH, eloA, lg.avgGoals);
+  const wS = 0.55, wE = 0.45;
+  const mix = (a, b) => wS * a + wE * b;
+  let pH = mix(analysis.probs.pH, eloP.pH), pD = mix(analysis.probs.pD, eloP.pD), pA = mix(analysis.probs.pA, eloP.pA);
+  const s = pH + pD + pA; pH /= s; pD /= s; pA /= s;
+  return {
+    probs: {
+      pH, pD, pA,
+      pO25: mix(analysis.probs.pO25, eloP.pO25),
+      pU25: mix(analysis.probs.pU25, eloP.pU25),
+      pBs: mix(analysis.probs.pBs, eloP.pBs),
+    },
+    elo: { home: Math.round(eloH), away: Math.round(eloA), used: true },
+  };
+}
+
 // ───────────────────── HELPERS API-FOOTBALL ────────────────────────────────
 async function af(pathAndQuery) {
   // A "API-Football" existe em 2 provedores. Tentamos o direto (api-sports.io)
@@ -474,6 +533,8 @@ app.post("/api/analyze", async (req, res) => {
       fetchTeamStats(awayTeam, leagueId, season),
     ]);
     const analysis = runModel(leagueId, home, away);
+    const ens = await withEnsemble(leagueId, analysis, home, away);
+    analysis.probs = ens.probs; analysis.elo = ens.elo;
     res.json({ ok: true, season, analysis });
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -561,6 +622,8 @@ app.post("/api/value", async (req, res) => {
       fetchTeamStats(awayTeam, leagueId, season),
     ]);
     const analysis = runModel(leagueId, home, away);
+    const ens = await withEnsemble(leagueId, analysis, home, away);
+    analysis.probs = ens.probs; analysis.elo = ens.elo;
 
     const { games, remaining } = await fetchOdds(LEAGUES[leagueId].oddsKey, regions, "h2h,totals");
 
@@ -795,6 +858,8 @@ app.get("/api/auto-pick", async (req, res) => {
           fetchTeamStats(g.away_team, leagueId, season),
         ]);
         const analysis = runModel(leagueId, home, away);
+        const ens = await withEnsemble(leagueId, analysis, home, away);
+        analysis.probs = ens.probs; analysis.elo = ens.elo;
         const { best } = bestOddsByOutcome(g);
         const rows = [];
         const push = (label, p, oddObj) => {
