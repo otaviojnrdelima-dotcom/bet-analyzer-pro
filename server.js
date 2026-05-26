@@ -535,6 +535,167 @@ app.post("/api/value-manual", (req, res) => {
   });
 });
 
+// SUGESTÃO AGORA: jogos das próximas horas + surebets + melhor aposta de valor
+// (calculada contra o consenso do mercado — usa só a The Odds API, é barato).
+app.get("/api/now", async (req, res) => {
+  if (!ODDS_API_KEY) return res.status(400).json({ error: "ODDS_API_KEY não configurada no servidor. Veja o README." });
+  const sport = req.query.sport || "soccer_brazil_campeonato";
+  const bankroll = parseFloat(req.query.bankroll) || 1000;
+  const hours = parseFloat(req.query.hours) || 72;
+  const regions = req.query.regions || "eu,uk";
+  try {
+    const { games, remaining } = await fetchOdds(sport, regions, "h2h");
+    const now = Date.now();
+    const horizon = now + hours * 3600 * 1000;
+    const inWindow = games.filter(g => {
+      const t = new Date(g.commence_time).getTime();
+      return t >= now - 2 * 3600 * 1000 && t <= horizon;
+    });
+
+    const enriched = inWindow.map(g => {
+      const byOutcome = {}; // nome -> { prices:[], best:{price,bk} }
+      for (const bk of (g.bookmakers || [])) {
+        for (const mkt of (bk.markets || [])) {
+          if (mkt.key !== "h2h") continue;
+          for (const o of (mkt.outcomes || [])) {
+            if (!byOutcome[o.name]) byOutcome[o.name] = { prices: [], best: { price: 0, bk: "" } };
+            byOutcome[o.name].prices.push(o.price);
+            if (o.price > byOutcome[o.name].best.price) byOutcome[o.name].best = { price: o.price, bk: bk.title };
+          }
+        }
+      }
+      const names = Object.keys(byOutcome);
+      if (!names.length) return null;
+      const avgImplied = {}; let sumAvg = 0;
+      for (const n of names) {
+        const ps = byOutcome[n].prices;
+        const ai = ps.reduce((a, p) => a + 1 / p, 0) / ps.length;
+        avgImplied[n] = ai; sumAvg += ai;
+      }
+      const outcomes = names.map(n => {
+        const fair = avgImplied[n] / sumAvg;          // prob de consenso (sem margem)
+        const best = byOutcome[n].best;
+        const ev = best.price * fair - 1;             // valor vs consenso
+        const k = ev > 0 ? valueKelly(fair, best.price) : 0;
+        return {
+          name: n, bestOdd: best.price, bookmaker: best.bk,
+          consensusProb: fair, evPct: ev * 100,
+          kelly: k, stake: Math.round(k * bankroll * 100) / 100,
+        };
+      }).sort((a, b) => b.evPct - a.evPct);
+      return {
+        game: `${g.home_team} vs ${g.away_team}`,
+        home: g.home_team, away: g.away_team,
+        commence: g.commence_time,
+        outcomes, best: outcomes[0],
+        marginPct: (sumAvg - 1) * 100,
+      };
+    }).filter(Boolean).sort((a, b) => new Date(a.commence) - new Date(b.commence));
+
+    const surebets = arbScan(inWindow, bankroll);
+
+    let suggestion = null;
+    if (surebets.length) {
+      const sb = surebets[0];
+      suggestion = { type: "surebet", game: sb.game, commence: sb.commence, profitPct: sb.profitPct, guaranteedProfit: sb.guaranteedProfit, stakes: sb.stakes };
+    } else {
+      let bestRow = null;
+      for (const g of enriched) {
+        const o = g.best;
+        if (o && (!bestRow || o.evPct > bestRow.evPct)) bestRow = { ...o, game: g.game, commence: g.commence };
+      }
+      if (bestRow) suggestion = { type: "value", ...bestRow };
+    }
+
+    res.json({ ok: true, sport, remaining, capturedAt: new Date().toISOString(), count: enriched.length, suggestion, surebets, games: enriched });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// PALPITE 1-CLIQUE: a IA varre os jogos, escolhe o melhor candidato e roda o
+// modelo completo (Poisson) nele, cruzando com as odds reais. Devolve a aposta.
+app.get("/api/auto-pick", async (req, res) => {
+  const leagueId = req.query.leagueId;
+  const bankroll = parseFloat(req.query.bankroll) || 1000;
+  const regions = req.query.regions || "eu,uk";
+  if (!LEAGUES[leagueId]) return res.status(400).json({ error: "Liga inválida." });
+  if (!ODDS_API_KEY) return res.status(400).json({ error: "ODDS_API_KEY não configurada no servidor." });
+  const lg = LEAGUES[leagueId];
+  const season = parseInt(req.query.season, 10) || lg.defaultSeason;
+  try {
+    const { games, remaining } = await fetchOdds(lg.oddsKey, regions, "h2h");
+    const now = Date.now();
+    const horizon = now + 72 * 3600 * 1000;
+    const inWindow = games.filter(g => {
+      const t = new Date(g.commence_time).getTime();
+      return t >= now - 2 * 3600 * 1000 && t <= horizon;
+    });
+    if (!inWindow.length) return res.json({ ok: true, kind: "empty", message: "Sem jogos nas próximas horas nessa liga.", remaining });
+
+    // 1) surebet tem prioridade absoluta (lucro garantido)
+    const surebets = arbScan(inWindow, bankroll);
+    if (surebets.length) return res.json({ ok: true, kind: "surebet", surebet: surebets[0], remaining });
+
+    // 2) escolhe o jogo com maior sinal de valor de mercado (consenso entre casas)
+    let candidate = null;
+    for (const g of inWindow) {
+      const byOutcome = {};
+      for (const bk of (g.bookmakers || [])) for (const mkt of (bk.markets || [])) {
+        if (mkt.key !== "h2h") continue;
+        for (const o of (mkt.outcomes || [])) {
+          if (!byOutcome[o.name]) byOutcome[o.name] = { prices: [], best: 0 };
+          byOutcome[o.name].prices.push(o.price);
+          if (o.price > byOutcome[o.name].best) byOutcome[o.name].best = o.price;
+        }
+      }
+      const names = Object.keys(byOutcome);
+      if (!names.length) continue;
+      const avg = {}; let sum = 0;
+      for (const n of names) { const ps = byOutcome[n].prices; const ai = ps.reduce((a, p) => a + 1 / p, 0) / ps.length; avg[n] = ai; sum += ai; }
+      let bestEv = -Infinity;
+      for (const n of names) { const fair = avg[n] / sum; const ev = byOutcome[n].best * fair - 1; if (ev > bestEv) bestEv = ev; }
+      if (!candidate || bestEv > candidate.signal) candidate = { game: g, signal: bestEv };
+    }
+    if (!candidate) return res.json({ ok: true, kind: "empty", message: "Sem dados suficientes nos jogos.", remaining });
+
+    const g = candidate.game;
+
+    // 3) análise REAL com o modelo Poisson (precisa da API-Football)
+    if (!API_FOOTBALL_KEY) {
+      return res.json({
+        ok: true, kind: "market-only", remaining,
+        game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
+        message: "Varredura de mercado pronta, mas a chave da API-Football não está configurada pra rodar o modelo completo.",
+      });
+    }
+    const [home, away] = await Promise.all([
+      fetchTeamStats(g.home_team, leagueId, season),
+      fetchTeamStats(g.away_team, leagueId, season),
+    ]);
+    const analysis = runModel(leagueId, home, away);
+    const { best } = bestOddsByOutcome(g);
+    const rows = [];
+    const push = (label, p, oddObj) => {
+      if (!oddObj || !(oddObj.price > 1)) return;
+      const ev = expectedValue(p, oddObj.price);
+      const k = ev > 0 ? valueKelly(p, oddObj.price) : 0;
+      rows.push({ label, modelProb: p, marketOdd: oddObj.price, bookmaker: oddObj.bk, fairOdd: fairOdd(p), evPct: ev * 100, isValue: ev > 0, kelly: k, suggestedStake: Math.round(k * bankroll * 100) / 100 });
+    };
+    push(`Vitória ${home.teamName}`, analysis.probs.pH, best[g.home_team]);
+    push("Empate", analysis.probs.pD, best["Draw"]);
+    push(`Vitória ${away.teamName}`, analysis.probs.pA, best[g.away_team]);
+    rows.sort((a, b) => b.evPct - a.evPct);
+    res.json({
+      ok: true, kind: "model", remaining,
+      game: `${g.home_team} vs ${g.away_team}`, commence: g.commence_time,
+      analysis, valueRows: rows, bestValue: rows.find(r => r.isValue) || rows[0],
+    });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ─────────────────────── STATIC (frontend) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, "public")));
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
