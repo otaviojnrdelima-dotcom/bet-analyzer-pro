@@ -636,70 +636,89 @@ app.post("/api/arbitrage-manual", (req, res) => {
 });
 
 // MOTOR DE VALOR: cruza a probabilidade do modelo com as odds reais das casas.
+// Se o modelo não rodar (time sem cobertura), cai na linha justa do mercado.
 app.post("/api/value", async (req, res) => {
   const { leagueId, homeTeam, awayTeam } = req.body || {};
   const season = parseInt(req.body?.season, 10) || LEAGUES[leagueId]?.defaultSeason;
   const bankroll = parseFloat(req.body?.bankroll) || 1000;
   const regions = req.body?.regions || "eu,uk";
   if (!LEAGUES[leagueId]) return res.status(400).json({ error: "Liga inválida." });
-  if (!API_FOOTBALL_KEY) return res.status(400).json({ error: "API_FOOTBALL_KEY não configurada." });
   if (!ODDS_API_KEY) return res.status(400).json({ error: "ODDS_API_KEY não configurada (necessária pra comparar com o mercado)." });
   if (!homeTeam || !awayTeam) return res.status(400).json({ error: "Informe os dois times." });
 
   try {
-    const [home, away] = await Promise.all([
-      fetchTeamStats(homeTeam, leagueId, season),
-      fetchTeamStats(awayTeam, leagueId, season),
-    ]);
-    const analysis = runModel(leagueId, home, away);
-    const ens = await withEnsemble(leagueId, analysis, home, away);
-    analysis.probs = ens.probs; analysis.elo = ens.elo;
+    // 1) tenta o modelo (pode falhar se o time não tiver cobertura)
+    let analysis = null, homeName = homeTeam, awayName = awayTeam, modelNote = "";
+    if (API_FOOTBALL_KEY) {
+      try {
+        const [home, away] = await Promise.all([
+          fetchTeamStats(homeTeam, leagueId, season),
+          fetchTeamStats(awayTeam, leagueId, season),
+        ]);
+        analysis = runModel(leagueId, home, away);
+        const ens = await withEnsemble(leagueId, analysis, home, away);
+        analysis.probs = ens.probs; analysis.elo = ens.elo;
+        homeName = home.teamName; awayName = away.teamName;
+      } catch (e) { modelNote = e.message; }
+    }
 
+    // 2) odds reais do mercado
     const { games, remaining } = await fetchOdds(LEAGUES[leagueId].oddsKey, regions, "h2h,totals");
-
     const game = games.find(g =>
-      teamsMatch(g.home_team, home.teamName) && teamsMatch(g.away_team, away.teamName)
+      (teamsMatch(g.home_team, homeName) && teamsMatch(g.away_team, awayName)) ||
+      (teamsMatch(g.home_team, homeTeam) && teamsMatch(g.away_team, awayTeam))
     );
     if (!game) {
       return res.json({
         ok: true, matched: false, remaining, analysis,
-        message: "Análise pronta, mas não achei esse jogo nas odds do mercado agora (jogo distante, nome diferente ou liga sem cobertura). Use a calculadora de valor manual com a probabilidade acima.",
+        message: analysis
+          ? "Análise pronta, mas não achei esse jogo nas odds do mercado agora. Use a calculadora de valor manual com a probabilidade acima."
+          : `Não consegui rodar o modelo (${modelNote || "time sem cobertura"}) nem achar o jogo nas odds. Confira os nomes ou tente outra liga.`,
       });
     }
 
     const { best, bestTotals } = bestOddsByOutcome(game);
-
     const rows = [];
-    const pushRow = (label, modelProb, oddObj) => {
-      if (!oddObj || !(oddObj.price > 1)) return;
-      const ev = expectedValue(modelProb, oddObj.price);
-      const k = ev > 0 ? valueKelly(modelProb, oddObj.price) : 0;
+    const pushRow = (label, prob, oddObj) => {
+      if (!oddObj || !(oddObj.price > 1) || prob == null) return;
+      const ev = expectedValue(prob, oddObj.price);
+      const k = ev > 0 ? valueKelly(prob, oddObj.price) : 0;
       rows.push({
-        label, modelProb,
-        marketOdd: oddObj.price, bookmaker: oddObj.bk,
-        fairOdd: fairOdd(modelProb),
-        impliedProb: 1 / oddObj.price,
-        evPct: ev * 100,
-        isValue: ev > 0,
-        kelly: k,
+        label, modelProb: prob, marketOdd: oddObj.price, bookmaker: oddObj.bk,
+        fairOdd: fairOdd(prob), impliedProb: 1 / oddObj.price,
+        evPct: ev * 100, isValue: ev > 0, kelly: k,
         suggestedStake: Math.round(k * bankroll * 100) / 100,
       });
     };
 
-    pushRow(`Vitória ${home.teamName}`, analysis.probs.pH, best[game.home_team]);
-    pushRow("Empate", analysis.probs.pD, best["Draw"]);
-    pushRow(`Vitória ${away.teamName}`, analysis.probs.pA, best[game.away_team]);
-    pushRow("Over 2.5 Gols", analysis.probs.pO25, bestTotals["Over 2.5"]);
-    pushRow("Under 2.5 Gols", analysis.probs.pU25, bestTotals["Under 2.5"]);
+    let mode;
+    if (analysis) {
+      // modo MODELO (ensemble Dixon-Coles + Elo)
+      mode = "model";
+      pushRow(`Vitória ${homeName}`, analysis.probs.pH, best[game.home_team]);
+      pushRow("Empate", analysis.probs.pD, best["Draw"]);
+      pushRow(`Vitória ${awayName}`, analysis.probs.pA, best[game.away_team]);
+      pushRow("Over 2.5 Gols", analysis.probs.pO25, bestTotals["Over 2.5"]);
+      pushRow("Under 2.5 Gols", analysis.probs.pU25, bestTotals["Under 2.5"]);
+    } else {
+      // modo MERCADO (linha justa via devig da casa sharp) — quando o modelo não roda
+      mode = "market";
+      const sharp = sharpFairProbs(game);
+      if (sharp) {
+        pushRow(`Vitória ${game.home_team}`, sharp.probs[game.home_team], best[game.home_team]);
+        pushRow("Empate", sharp.probs["Draw"], best["Draw"]);
+        pushRow(`Vitória ${game.away_team}`, sharp.probs[game.away_team], best[game.away_team]);
+      }
+    }
 
     rows.sort((a, b) => b.evPct - a.evPct);
-
     res.json({
-      ok: true, matched: true, remaining, bankroll,
+      ok: true, matched: true, mode, remaining, bankroll,
       game: `${game.home_team} vs ${game.away_team}`,
       commence: game.commence_time,
       analysis, valueRows: rows,
       bestValue: rows.find(r => r.isValue) || null,
+      note: mode === "market" ? `Modelo não rodou (${modelNote || "sem cobertura"}). Valor calculado pela linha justa do mercado.` : "",
     });
   } catch (e) {
     res.status(502).json({ error: e.message });

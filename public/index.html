@@ -530,7 +530,7 @@ async function valueAuto(){
     const r=await fetch('/api/value',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({leagueId,homeTeam,awayTeam,bankroll})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Erro.');
-    if(!d.matched){ $('value-out').innerHTML = `<div class="ok">${d.message}</div>`; renderAnalysis(d.analysis,'dados reais'); return; }
+    if(!d.matched){ $('value-out').innerHTML = `<div class="ok">${d.message}</div>`; return; }
     const rows = d.valueRows.map(v=>{
       const col = v.isValue?'var(--green)':'var(--dim2)';
       return `<div class="rank ${v.isValue?'top':''}">
@@ -551,8 +551,9 @@ async function valueAuto(){
           <div class="metric"><div class="m-v y">${pct(bv.modelProb)}%</div><div class="m-l">PROB. MODELO</div></div>
           <div class="metric"><div class="m-v b">R$ ${bv.suggestedStake.toFixed(0)}</div><div class="m-l">STAKE (KELLY)</div></div>
         </div></div>`:`<div class="arb-card arb-no" style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;color:var(--yellow)">Nenhuma aposta de valor positivo agora</div><div class="note" style="margin-top:4px">O mercado está bem precificado nesse jogo. Sem EV+ não há vantagem — melhor não apostar.</div></div>`}
-      <div class="card"><div class="sec">📊 Modelo vs mercado${d.remaining!=null?` · créditos: ${d.remaining}`:''}</div>${rows}</div>
-      <div class="disc">EV = (prob. do modelo × odd) − 1. Positivo = a casa pagou mais que o justo. Aposte com responsabilidade.</div>`;
+      <div class="card"><div class="sec">📊 ${d.mode==='market'?'Linha do mercado':'Modelo'} vs casas${d.remaining!=null?` · créditos: ${d.remaining}`:''}</div>${rows}</div>
+      ${d.note?`<div class="note" style="text-align:center">${d.note}</div>`:''}
+      <div class="disc">EV = (probabilidade × odd) − 1. Positivo = a casa pagou mais que o justo. Aposte com responsabilidade.</div>`;
   }catch(e){ $('value-out').innerHTML = `<div class="err">${e.message}</div>`; }
 }
 
