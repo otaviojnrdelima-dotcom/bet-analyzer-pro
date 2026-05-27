@@ -993,6 +993,40 @@ app.get("/api/gaps", async (req, res) => {
   }
 });
 
+// AO VIVO: varre TODAS as ligas configuradas e junta os jogos ao vivo + de hoje
+// numa lista só (igual à tela "Ao Vivo" das casas). Cache de 2min por liga.
+app.get("/api/live", async (req, res) => {
+  if (!ODDS_API_KEY) return res.status(400).json({ error: "ODDS_API_KEY não configurada no servidor." });
+  const regions = req.query.regions || "eu,uk";
+  const hours = parseFloat(req.query.hours) || 48;
+  const now = Date.now(), lo = now - 3.5 * 3600 * 1000, hi = now + hours * 3600 * 1000;
+  const out = []; let remaining = null;
+  for (const [id, lg] of Object.entries(LEAGUES)) {
+    try {
+      const { games, remaining: rem } = await fetchOdds(lg.oddsKey, regions, "h2h");
+      if (rem != null) remaining = rem;
+      for (const g of (games || [])) {
+        const t = new Date(g.commence_time).getTime();
+        if (t < lo || t > hi) continue;
+        const { best } = bestOddsByOutcome(g);
+        out.push({
+          leagueId: id, league: lg.name,
+          game: `${g.home_team} vs ${g.away_team}`,
+          home: g.home_team, away: g.away_team,
+          commence: g.commence_time, live: t <= now,
+          odds: {
+            home: best[g.home_team] ? best[g.home_team].price : null,
+            draw: best["Draw"] ? best["Draw"].price : null,
+            away: best[g.away_team] ? best[g.away_team].price : null,
+          },
+        });
+      }
+    } catch (_) { /* pula liga sem jogos / fora de temporada */ }
+  }
+  out.sort((a, b) => (b.live - a.live) || (new Date(a.commence) - new Date(b.commence)));
+  res.json({ ok: true, remaining, count: out.length, games: out });
+});
+
 // ─────────────────────── STATIC (frontend) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, "public")));
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));

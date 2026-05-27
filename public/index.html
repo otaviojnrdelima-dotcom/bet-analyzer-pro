@@ -143,6 +143,7 @@
       <button class="go" onclick="autoPickNow()">🤖 IA: analisar e dar o palpite (1 clique)</button>
       <button class="ghost" onclick="loadNow()">⚡ Só listar oportunidades (sem rodar o modelo)</button>
       <button class="ghost" onclick="loadGaps()">🎯 Radar de brechas (varrer todas as casas)</button>
+      <button class="ghost" onclick="loadLive()">📺 Ver jogos ao vivo (todas as ligas)</button>
       <div class="note">O botão da IA varre os jogos das próximas horas, escolhe o melhor candidato e roda o modelo completo nele, cruzando com as odds reais. Cada palpite consome requisições da API-Football (tier grátis = 100/dia).</div>
     </div>
     <div id="now-out"></div>
@@ -804,6 +805,37 @@ async function autoPickNow(){
       <div class="disc">Modelo Poisson cruzado com odds reais. Probabilístico, não garante ganho. Aposte com responsabilidade.</div>`;
     tickCountdowns(); if(NOW_TIMER)clearInterval(NOW_TIMER); NOW_TIMER=setInterval(tickCountdowns,1000);
   }catch(e){ $('now-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+let LIVE_DATA=null;
+async function loadLive(){
+  $('now-out').innerHTML = loadingBox('📺 Buscando jogos ao vivo e de hoje em todas as ligas...');
+  try{
+    const r=await fetch('/api/live');
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro.');
+    LIVE_DATA=d;
+    if(!d.count){ $('now-out').innerHTML=`<div class="card"><div class="sec">📺 Ao vivo</div><p class="note" style="margin-top:0">Nenhum jogo ao vivo ou hoje nas ligas cobertas${d.remaining!=null?` · créditos: ${d.remaining}`:''}. Volte perto dos jogos.</p></div>`; return; }
+    const liveN = d.games.filter(g=>g.live).length;
+    $('now-out').innerHTML = `<div class="ok">📺 ${d.count} jogos · ${liveN} ao vivo agora${d.remaining!=null?` · créditos: ${d.remaining}`:''}</div>` +
+      `<div class="card"><div class="sec">Jogos — clique pra analisar</div>` +
+      d.games.map((g,i)=>`<div class="rank ${g.live?'top':''}">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:700">${g.live?'<span style="color:#ff6b6b">🔴 AO VIVO</span> ':''}${g.game}</div>
+          <div style="font-size:10px;color:var(--dim)">${g.league} · ${g.live?'em andamento':'começa em '}${g.live?'':`<b data-commence="${g.commence}"></b>`}</div>
+          <div style="font-size:11px;color:var(--dim2);margin-top:3px">Casa ${g.odds.home?g.odds.home.toFixed(2):'-'} · Empate ${g.odds.draw?g.odds.draw.toFixed(2):'-'} · Fora ${g.odds.away?g.odds.away.toFixed(2):'-'}</div>
+          <button class="ghost" style="margin:6px 0 0;padding:6px 10px;width:auto;font-size:11px;color:var(--green)" onclick="analyzeLive(${i})">Analisar este jogo →</button>
+        </div>
+      </div>`).join('') +
+      `</div><div class="disc">Lista de jogos ao vivo e de hoje das ligas cobertas. Clique pra cruzar com o modelo e achar valor.</div>`;
+    tickCountdowns(); if(NOW_TIMER)clearInterval(NOW_TIMER); NOW_TIMER=setInterval(tickCountdowns,1000);
+  }catch(e){ $('now-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+function analyzeLive(i){
+  const g=LIVE_DATA && LIVE_DATA.games[i]; if(!g) return;
+  $('v-league').value=g.leagueId; $('v-home').value=g.home; $('v-away').value=g.away;
+  document.querySelector('.tab[data-tab="value"]').click();
+  window.scrollTo(0,0);
+  valueAuto();
 }
 async function loadGaps(){
   const sport=$('now-league').value, bank=parseFloat($('now-bank').value)||1000;
