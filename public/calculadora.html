@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Calculadora Bet Analyzer</title>
+<style>
+  :root{--bg:#060b10;--bg2:#0a1628;--line:#1a3a2a;--green:#00ff88;--green2:#00cc6a;
+    --text:#c8d6e5;--dim:#4a7c5c;--dim2:#6a9c7c;--yellow:#f0c040;--red:#ff6b6b;--blue:#7dd8f8;--purple:#b8a0e8;--orange:#f0a050;}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono','SF Mono','Courier New',monospace;font-size:14px;line-height:1.4;padding-bottom:40px}
+  .wrap{max-width:720px;margin:0 auto}
+  header{background:linear-gradient(135deg,#0a1628,#0d1f12);border-bottom:1px solid #00ff8825;padding:16px;display:flex;align-items:center;gap:12px}
+  .logo{width:42px;height:42px;border-radius:10px;flex-shrink:0;background:linear-gradient(135deg,var(--green),var(--green2));display:flex;align-items:center;justify-content:center;font-size:22px;color:#060b10;box-shadow:0 0 18px #00ff8840}
+  .htitle{font-size:17px;font-weight:700;color:var(--green);letter-spacing:.5px}
+  .hsub{font-size:10px;color:var(--dim);margin-top:2px}
+  .panel{padding:12px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+  .sec{font-size:10px;font-weight:700;color:var(--green);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px}
+  label{font-size:10px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:5px}
+  input,select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:11px 12px;font-size:15px;font-family:inherit;outline:none}
+  input:focus,select:focus{border-color:var(--green)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .fg{margin-bottom:12px}.fg:last-child{margin-bottom:0}
+  button.go{width:100%;background:linear-gradient(135deg,var(--green),var(--green2));border:none;border-radius:10px;color:#060b10;font-family:inherit;font-size:14px;font-weight:700;letter-spacing:.5px;padding:14px;cursor:pointer;margin-top:6px}
+  button.go:active{transform:scale(.99)}
+  button.ghost{width:100%;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--dim);font-family:inherit;font-size:13px;padding:12px;cursor:pointer;margin-top:8px}
+  .err{background:#2a0a0a;border:1px solid #ff4444;color:#ff8888;border-radius:8px;padding:11px;font-size:12px;margin-bottom:12px}
+  .topbet{background:linear-gradient(135deg,#0d2a1a,#0a1f14);border:1px solid #00ff8840;border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:0 0 40px #00ff8810}
+  .tb-lbl{font-size:10px;color:var(--dim);letter-spacing:1.5px;margin-bottom:6px}
+  .tb-bet{font-size:21px;font-weight:700;color:var(--green);margin-bottom:3px}
+  .tb-desc{font-size:12px;color:var(--dim2);margin-bottom:14px}
+  .metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .metric{background:var(--bg);border-radius:9px;padding:10px;text-align:center}
+  .m-v{font-size:18px;font-weight:700;color:var(--green)}.m-v.y{color:var(--yellow)}.m-v.b{color:var(--blue)}
+  .m-l{font-size:9px;color:var(--dim);margin-top:3px;letter-spacing:.5px}
+  .bar{margin-bottom:9px}
+  .bar-t{display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px}
+  .bar-bg{background:var(--bg);border-radius:4px;height:6px;overflow:hidden}
+  .bar-f{height:100%;border-radius:4px;transition:width .7s ease}
+  .rank{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);margin-bottom:7px;background:var(--bg)}
+  .rank.top{background:#0d2a1a;border-color:#00ff8830}
+  .badge{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#060b10;flex-shrink:0}
+  .disc{font-size:10px;color:#2a4a3a;text-align:center;margin-top:10px;line-height:1.6}
+  .backlink{display:block;text-align:center;font-size:11px;color:var(--dim);margin-top:14px;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">&#9889;</div>
+    <div><div class="htitle">CALCULADORA BET ANALYZER</div><div class="hsub">Você digita os dados &middot; ela diz a melhor aposta &middot; 100% offline</div></div>
+  </header>
+  <div class="panel">
+    <div class="card">
+      <div class="sec">&#127942; Campeonato &amp; times</div>
+      <div class="grid3">
+        <div class="fg"><label>Campeonato</label><select id="league"></select></div>
+        <div class="fg"><label>Time da casa</label><input id="homeTeam" placeholder="Ex: Flamengo"></div>
+        <div class="fg"><label>Time visitante</label><input id="awayTeam" placeholder="Ex: Palmeiras"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec">&#128202; Tabela &amp; rodadas</div>
+      <div class="grid3">
+        <div class="fg"><label>Posição casa</label><input id="homePos" type="number" placeholder="3"></div>
+        <div class="fg"><label>Posição visitante</label><input id="awayPos" type="number" placeholder="12"></div>
+        <div class="fg"><label>Rodadas concluídas</label><input id="gp" type="number" placeholder="18"></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="sec">&#9917; Time da casa</div>
+        <div class="grid2">
+          <div class="fg"><label>Gols feitos</label><input id="hGF" type="number" placeholder="28"></div>
+          <div class="fg"><label>Gols sofridos</label><input id="hGA" type="number" placeholder="14"></div>
+          <div class="fg"><label>Vitórias</label><input id="hW" type="number" placeholder="10"></div>
+          <div class="fg"><label>Derrotas</label><input id="hL" type="number" placeholder="3"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="sec">&#9917; Time visitante</div>
+        <div class="grid2">
+          <div class="fg"><label>Gols feitos</label><input id="aGF" type="number" placeholder="22"></div>
+          <div class="fg"><label>Gols sofridos</label><input id="aGA" type="number" placeholder="20"></div>
+          <div class="fg"><label>Vitórias</label><input id="aW" type="number" placeholder="7"></div>
+          <div class="fg"><label>Derrotas</label><input id="aL" type="number" placeholder="6"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec">&#128681; Escanteios &mdash; soma dos últimos 10 jogos</div>
+      <div class="grid2">
+        <div class="fg"><label>Casa (soma 10 jogos)</label><input id="hC" type="number" placeholder="54"></div>
+        <div class="fg"><label>Visitante (soma 10 jogos)</label><input id="aC" type="number" placeholder="48"></div>
+      </div>
+    </div>
+
+    <button class="go" onclick="analisar()">&#9889; Calcular melhor aposta</button>
+    <button class="ghost" onclick="limpar()">&#8635; Limpar</button>
+    <div id="out" style="margin-top:14px"></div>
+    <a class="backlink" href="/">&larr; ir para o app completo (ao vivo, valor, arbitragem)</a>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const LEAGUES={
+  "Brasileirão":{teams:20,totalGames:38,avgGoals:2.65,avgCorners:9.8},
+  "Premier League":{teams:20,totalGames:38,avgGoals:2.83,avgCorners:10.1},
+  "La Liga":{teams:20,totalGames:38,avgGoals:2.72,avgCorners:9.5},
+  "Bundesliga":{teams:18,totalGames:34,avgGoals:3.18,avgCorners:10.3},
+  "Serie A (Itália)":{teams:20,totalGames:38,avgGoals:2.67,avgCorners:9.4},
+  "Ligue 1":{teams:18,totalGames:34,avgGoals:2.71,avgCorners:9.6},
+  "Libertadores":{teams:32,totalGames:13,avgGoals:2.5,avgCorners:9.5},
+  "Sul-Americana":{teams:32,totalGames:13,avgGoals:2.5,avgCorners:9.3},
+};
+$('league').innerHTML=Object.keys(LEAGUES).map(l=>`<option>${l}</option>`).join('');
+
+function pPMF(k,l){if(l<=0)return k===0?1:0;let lp=k*Math.log(l)-l;for(let i=1;i<=k;i++)lp-=Math.log(i);return Math.exp(lp);}
+function pCDF(up,l){let s=0;for(let k=0;k<=up;k++)s+=pPMF(k,l);return s;}
+function tau(h,a,lH,lA,rho){if(h===0&&a===0)return 1-lH*lA*rho;if(h===0&&a===1)return 1+lH*rho;if(h===1&&a===0)return 1+lA*rho;if(h===1&&a===1)return 1-rho;return 1;}
+function probs(lH,lA){const M=10;let tot=0;const m=[];for(let h=0;h<=M;h++){m[h]=[];for(let a=0;a<=M;a++){let p=pPMF(h,lH)*pPMF(a,lA)*tau(h,a,lH,lA,-0.13);if(p<0)p=0;m[h][a]=p;tot+=p;}}
+  let pH=0,pD=0,pA=0,pO=0,pBs=0;for(let h=0;h<=M;h++)for(let a=0;a<=M;a++){const p=m[h][a]/tot;if(h>a)pH+=p;else if(h===a)pD+=p;else pA+=p;if(h+a>=3)pO+=p;if(h>0&&a>0)pBs+=p;}
+  return{pH,pD,pA,pO,pU:1-pO,pBs};}
+function num(v,d=0){const n=parseFloat(v);return isNaN(n)?d:n;}
+
+function analisar(){
+  const lg=LEAGUES[$('league').value];
+  const gp=num($('gp').value,1)||1;
+  const lgAvg=lg.avgGoals/2;
+  const hName=$('homeTeam').value.trim()||'Casa', aName=$('awayTeam').value.trim()||'Fora';
+  const clamp=x=>Math.max(0.3,Math.min(3,x));
+  const hAtt=clamp((num($('hGF').value)/gp)/lgAvg), hDef=clamp((num($('hGA').value)/gp)/lgAvg);
+  const aAtt=clamp((num($('aGF').value)/gp)/lgAvg), aDef=clamp((num($('aGA').value)/gp)/lgAvg);
+  if(num($('hGF').value)+num($('aGF').value)===0){ $('out').innerHTML='<div class="err">Preencha pelo menos os gols dos times.</div>'; return; }
+  const gamesLeft=lg.totalGames-gp, urg=Math.max(0,1-gamesLeft/10);
+  const press=pos=>{const pct=num(pos,Math.ceil(lg.teams/2))/lg.teams;return (pct<=0.15||pct>=0.85)?1+urg*0.15:1-urg*0.05;};
+  const HOME=1.10;
+  const lH=lgAvg*hAtt*aDef*HOME*press($('homePos').value);
+  const lA=lgAvg*aAtt*hDef*(1/HOME)*press($('awayPos').value);
+  const raw=probs(lH,lA);
+  const form=(w,l)=>{const d=gp-w-l;return (w*3+d)/(gp*3||1);};
+  const fH=form(num($('hW').value),num($('hL').value)), fA=form(num($('aW').value),num($('aL').value));
+  let aH=raw.pH*(0.7+0.3*fH), aA=raw.pA*(0.7+0.3*fA), aD=Math.max(0,1-aH-aA);
+  const n=aH+aD+aA; aH/=n;aD/=n;aA/=n;
+  const lamC=(num($('hC').value,lg.avgCorners*5)+num($('aC').value,lg.avgCorners*5))/10;
+  const c={l:lamC,o85:1-pCDF(8,lamC),u85:pCDF(8,lamC),o95:1-pCDF(9,lamC),u95:pCDF(9,lamC),o105:1-pCDF(10,lamC)};
+
+  const bets=[
+    {l:'Vitória '+hName,d:'Resultado final — mandante vence',p:aH,m:'resultado'},
+    {l:'Empate',d:'Resultado final — empate',p:aD,m:'resultado'},
+    {l:'Vitória '+aName,d:'Resultado final — visitante vence',p:aA,m:'resultado'},
+    {l:'Over 2.5 Gols',d:'3 ou mais gols na partida',p:raw.pO,m:'gols'},
+    {l:'Under 2.5 Gols',d:'No máximo 2 gols',p:raw.pU,m:'gols'},
+    {l:'Ambas Marcam',d:'Os dois times marcam',p:raw.pBs,m:'gols'},
+    {l:'Over 8.5 Escanteios',d:'9+ escanteios',p:c.o85,m:'escanteios'},
+    {l:'Under 8.5 Escanteios',d:'até 8 escanteios',p:c.u85,m:'escanteios'},
+    {l:'Over 9.5 Escanteios',d:'10+ escanteios',p:c.o95,m:'escanteios'},
+    {l:'Under 9.5 Escanteios',d:'até 9 escanteios',p:c.u95,m:'escanteios'},
+    {l:'Over 10.5 Escanteios',d:'11+ escanteios',p:c.o105,m:'escanteios'},
+  ].sort((x,y)=>y.p-x.p);
+  const top=bets[0];
+  const pct=v=>Math.round(v*100);
+  const stars=v=>'★'.repeat(Math.round(v*5))+'☆'.repeat(5-Math.round(v*5));
+  const medal=['#00ff88','#90ee90','#4a7c5c','#2a4a3a','#2a4a3a','#2a4a3a'];
+  const bar=(lab,v,col)=>`<div class="bar"><div class="bar-t"><span style="color:var(--dim2)">${lab}</span><span style="color:${col};font-weight:700">${pct(v)}%</span></div><div class="bar-bg"><div class="bar-f" style="width:${pct(v)}%;background:linear-gradient(90deg,${col}60,${col})"></div></div></div>`;
+  $('out').innerHTML=`
+    <div class="topbet">
+      <div class="tb-lbl">&#9889; MELHOR APOSTA — ${$('league').value.toUpperCase()}</div>
+      <div class="tb-bet">${top.l}</div>
+      <div class="tb-desc">${top.d} · mercado: ${top.m}</div>
+      <div class="metrics">
+        <div class="metric"><div class="m-v">${pct(top.p)}%</div><div class="m-l">PROBABILIDADE</div></div>
+        <div class="metric"><div class="m-v y" style="font-size:14px">${stars(top.p)}</div><div class="m-l">FORÇA</div></div>
+        <div class="metric"><div class="m-v b">${(1/top.p).toFixed(2)}</div><div class="m-l">ODD JUSTA</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec">&#9917; Mercado de gols</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">Gols esperados: ${hName} ${lH.toFixed(2)} · ${aName} ${lA.toFixed(2)}</div>
+      ${bar('Vitória '+hName,aH,'var(--green)')}${bar('Empate',aD,'var(--yellow)')}${bar('Vitória '+aName,aA,'var(--red)')}
+      <div style="border-top:1px solid var(--line);margin:10px 0 8px"></div>
+      ${bar('Over 2.5 Gols',raw.pO,'var(--blue)')}${bar('Under 2.5 Gols',raw.pU,'var(--purple)')}${bar('Ambas Marcam',raw.pBs,'var(--orange)')}
+    </div>
+    <div class="card">
+      <div class="sec">&#128681; Mercado de escanteios</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">Média esperada: ${c.l.toFixed(1)} escanteios/jogo</div>
+      ${bar('Over 8.5',c.o85,'var(--green)')}${bar('Under 8.5',c.u85,'var(--red)')}${bar('Over 9.5',c.o95,'var(--blue)')}${bar('Over 10.5',c.o105,'var(--orange)')}
+    </div>
+    <div class="card">
+      <div class="sec">&#127942; Ranking de oportunidades</div>
+      ${bets.slice(0,6).map((b,i)=>`<div class="rank ${i===0?'top':''}"><div class="badge" style="background:${medal[i]}">${i+1}</div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:700">${b.l}</div><div style="font-size:10px;color:var(--dim)">${b.d}</div></div>
+        <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:${medal[i]}">${pct(b.p)}%</div><div style="font-size:9px;color:var(--dim)">prob.</div></div></div>`).join('')}
+    </div>
+    <div class="disc">Cálculo por Poisson/Dixon-Coles + força ataque/defesa + pressão de tabela + forma recente, a partir dos dados que você digitou. Probabilístico, não garante ganho. Aposte com responsabilidade.</div>`;
+  $('out').scrollIntoView({behavior:'smooth'});
+}
+function limpar(){document.querySelectorAll('input').forEach(i=>i.value='');$('out').innerHTML='';}
+</script>
+</body>
+</html>
