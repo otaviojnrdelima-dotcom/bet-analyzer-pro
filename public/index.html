@@ -127,6 +127,7 @@
     <button class="tab active" data-tab="now">⚡ Agora</button>
     <button class="tab" data-tab="analyze">📊 Análise</button>
     <button class="tab" data-tab="value">💰 Valor</button>
+    <button class="tab" data-tab="calc">🧮 Calc</button>
     <button class="tab" data-tab="arb">⇄ Arb</button>
     <button class="tab" data-tab="guide">ℹ Guia</button>
   </div>
@@ -284,6 +285,45 @@
       <button class="go" onclick="addBet()">+ Adicionar ao diário</button>
       <div id="bank-list" style="margin-top:12px"></div>
     </div>
+  </div>
+
+  <!-- ============ CALCULADORA ============ -->
+  <div id="p-calc" class="panel">
+    <div class="card">
+      <div class="sec">🧮 Calculadora rápida</div>
+      <div class="note" style="margin-top:0;margin-bottom:10px">Escolha o que quer apostar, digite as médias (você lê nas estatísticas da casa/jogo) e veja a melhor chance + se a odd tem valor. Funciona pra jogo ao vivo.</div>
+      <div class="modesw">
+        <button id="cm-goals" class="on" onclick="setCalc('goals')">⚽ Gols/Result.</button>
+        <button id="cm-corners" onclick="setCalc('corners')">🚩 Escanteios</button>
+        <button id="cm-cards" onclick="setCalc('cards')">🟨 Cartões</button>
+      </div>
+
+      <div id="calc-goals">
+        <div class="grid2">
+          <div class="fg"><label>Casa: gols feitos/jogo</label><input id="cg-hf" type="number" step="0.1" placeholder="1.6"></div>
+          <div class="fg"><label>Casa: gols sofridos/jogo</label><input id="cg-ha" type="number" step="0.1" placeholder="0.9"></div>
+          <div class="fg"><label>Fora: gols feitos/jogo</label><input id="cg-af" type="number" step="0.1" placeholder="1.1"></div>
+          <div class="fg"><label>Fora: gols sofridos/jogo</label><input id="cg-aa" type="number" step="0.1" placeholder="1.4"></div>
+        </div>
+      </div>
+      <div id="calc-corners" style="display:none">
+        <div class="grid2">
+          <div class="fg"><label>Escanteios do time da casa/jogo</label><input id="cc-h" type="number" step="0.1" placeholder="5.4"></div>
+          <div class="fg"><label>Escanteios do time de fora/jogo</label><input id="cc-a" type="number" step="0.1" placeholder="4.8"></div>
+        </div>
+      </div>
+      <div id="calc-cards" style="display:none">
+        <div class="grid2">
+          <div class="fg"><label>Cartões do time da casa/jogo</label><input id="ck-h" type="number" step="0.1" placeholder="2.1"></div>
+          <div class="fg"><label>Cartões do time de fora/jogo</label><input id="ck-a" type="number" step="0.1" placeholder="2.4"></div>
+        </div>
+        <div class="note">Some os dois times. Amarelo conta 1; vermelho geralmente 2 (confira a regra da casa).</div>
+      </div>
+
+      <div class="fg" style="margin-top:10px"><label>Banca (R$) — pra sugerir stake</label><input id="calc-bank" type="number" value="1000"></div>
+      <button class="go" onclick="runCalc()">🧮 Calcular melhor chance</button>
+    </div>
+    <div id="calc-out"></div>
   </div>
 
   <!-- ============ GUIA ============ -->
@@ -801,6 +841,64 @@ function gotoValueFromNow(i){
   document.querySelector('.tab[data-tab="value"]').click();
   window.scrollTo(0,0);
   valueAuto();
+}
+
+// ---------- CALCULADORA (Poisson no cliente) ----------
+let CALC_MODE='goals';
+function setCalc(m){CALC_MODE=m;['goals','corners','cards'].forEach(x=>{$('cm-'+x).classList.toggle('on',x===m);$('calc-'+x).style.display=x===m?'block':'none';});}
+function pPMF(k,l){if(l<=0)return k===0?1:0;let lp=k*Math.log(l)-l;for(let i=1;i<=k;i++)lp-=Math.log(i);return Math.exp(lp);}
+function pCDF(up,l){let s=0;for(let k=0;k<=up;k++)s+=pPMF(k,l);return s;}
+function cDcTau(h,a,lH,lA,rho){if(h===0&&a===0)return 1-lH*lA*rho;if(h===0&&a===1)return 1+lH*rho;if(h===1&&a===0)return 1+lA*rho;if(h===1&&a===1)return 1-rho;return 1;}
+function goalsCalc(lH,lA){const M=10;let tot=0;const m=[];for(let h=0;h<=M;h++){m[h]=[];for(let a=0;a<=M;a++){let p=pPMF(h,lH)*pPMF(a,lA)*cDcTau(h,a,lH,lA,-0.13);if(p<0)p=0;m[h][a]=p;tot+=p;}}
+  let pH=0,pD=0,pA=0,o15=0,o25=0,o35=0,btts=0;for(let h=0;h<=M;h++)for(let a=0;a<=M;a++){const p=m[h][a]/tot;if(h>a)pH+=p;else if(h===a)pD+=p;else pA+=p;if(h+a>1.5)o15+=p;if(h+a>2.5)o25+=p;if(h+a>3.5)o35+=p;if(h>0&&a>0)btts+=p;}
+  return [{l:'Vitória Casa',p:pH},{l:'Empate',p:pD},{l:'Vitória Fora',p:pA},{l:'Dupla chance 1X',p:pH+pD},{l:'Dupla chance X2',p:pD+pA},{l:'Over 1.5 gols',p:o15},{l:'Under 1.5 gols',p:1-o15},{l:'Over 2.5 gols',p:o25},{l:'Under 2.5 gols',p:1-o25},{l:'Over 3.5 gols',p:o35},{l:'Ambas marcam — Sim',p:btts},{l:'Ambas marcam — Não',p:1-btts}];}
+function lineCalc(lambda,lines){const out=[];for(const L of lines){const o=1-pCDF(Math.floor(L),lambda);out.push({l:'Over '+L,p:o});out.push({l:'Under '+L,p:1-o});}return out;}
+function runCalc(){
+  let rows, info='';
+  if(CALC_MODE==='goals'){
+    const hf=+$('cg-hf').value||0,ha=+$('cg-ha').value||0,af=+$('cg-af').value||0,aa=+$('cg-aa').value||0;
+    if(hf+ha+af+aa===0){$('calc-out').innerHTML='<div class="err">Preencha as médias de gols.</div>';return;}
+    const lH=Math.max(0.1,(hf+aa)/2), lA=Math.max(0.1,(af+ha)/2);
+    info=`Gols esperados: Casa ${lH.toFixed(2)} · Fora ${lA.toFixed(2)}`; rows=goalsCalc(lH,lA);
+  } else if(CALC_MODE==='corners'){
+    const h=+$('cc-h').value||0,a=+$('cc-a').value||0,lam=h+a;
+    if(lam<=0){$('calc-out').innerHTML='<div class="err">Preencha os escanteios.</div>';return;}
+    info=`Escanteios esperados no jogo: ${lam.toFixed(1)}`; rows=lineCalc(lam,[8.5,9.5,10.5,11.5]);
+  } else {
+    const h=+$('ck-h').value||0,a=+$('ck-a').value||0,lam=h+a;
+    if(lam<=0){$('calc-out').innerHTML='<div class="err">Preencha os cartões.</div>';return;}
+    info=`Cartões esperados no jogo: ${lam.toFixed(1)}`; rows=lineCalc(lam,[2.5,3.5,4.5,5.5]);
+  }
+  rows.sort((a,b)=>b.p-a.p);
+  const top=rows[0]; const colors=['var(--green)','var(--blue)','var(--purple)','var(--orange)','var(--yellow)'];
+  const stars=v=>'★'.repeat(Math.round(v*5))+'☆'.repeat(5-Math.round(v*5));
+  $('calc-out').innerHTML = `
+    <div class="topbet"><div class="tb-lbl">🧮 MELHOR CHANCE</div>
+      <div class="tb-bet">${top.l}</div>
+      <div class="tb-desc">${info}</div>
+      <div class="metrics">
+        <div class="metric"><div class="m-v">${pct(top.p)}%</div><div class="m-l">PROBABILIDADE</div></div>
+        <div class="metric"><div class="m-v y" style="font-size:14px">${stars(top.p)}</div><div class="m-l">FORÇA</div></div>
+        <div class="metric"><div class="m-v b">${(1/top.p).toFixed(2)}</div><div class="m-l">ODD JUSTA</div></div>
+      </div>
+    </div>
+    <div class="card"><div class="sec">Todas as probabilidades</div>${rows.map((r,i)=>bar(r.l,r.p,colors[i%5])).join('')}</div>
+    <div class="card"><div class="sec">💰 Conferir valor na casa</div>
+      <div class="note" style="margin-top:0;margin-bottom:8px">Digite a odd que a casa paga na "${top.l}":</div>
+      <div class="grid2"><div class="fg"><label>Odd da casa</label><input id="calc-odd" type="number" step="0.01" placeholder="2.10"></div>
+        <div style="display:flex;align-items:flex-end"><button class="go" style="margin:0" onclick="calcValue(${top.p})">Conferir EV</button></div></div>
+      <div id="calc-ev"></div>
+    </div>
+    <div class="disc">Cálculo por Poisson/Dixon-Coles a partir das médias informadas. Probabilístico, não garante ganho. Aposte com responsabilidade.</div>`;
+}
+function calcValue(prob){
+  const odd=+$('calc-odd').value||0, bank=+$('calc-bank').value||1000;
+  if(odd<=1){$('calc-ev').innerHTML='<div class="err">Odd deve ser maior que 1.00.</div>';return;}
+  const ev=prob*odd-1, b=odd-1, f=Math.max(0,Math.min(((b*prob-(1-prob))/b)*0.5,0.15));
+  $('calc-ev').innerHTML=`<div class="arb-card ${ev>0?'arb-yes':'arb-no'}" style="margin-top:10px">
+    <div style="font-size:13px;font-weight:700;color:${ev>0?'var(--green)':'var(--yellow)'}">${ev>0?'✅ TEM VALOR · +'+(ev*100).toFixed(1)+'% EV':'Sem valor · '+(ev*100).toFixed(1)+'% EV'}</div>
+    <div class="note" style="margin-top:4px">Odd justa ${(1/prob).toFixed(2)} · a casa paga ${odd.toFixed(2)}. ${ev>0?'Stake sugerida: R$ '+Math.round(f*bank)+' ('+pct(f)+'% da banca)':'EV negativo: não recomendado.'}</div>
+  </div>`;
 }
 
 init();
