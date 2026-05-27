@@ -1023,8 +1023,57 @@ app.get("/api/live", async (req, res) => {
       }
     } catch (_) { /* pula liga sem jogos / fora de temporada */ }
   }
+  // Enriquece os jogos AO VIVO com placar/minuto/tempo (1 chamada à API-Football).
+  if (API_FOOTBALL_KEY && out.some(g => g.live)) {
+    try {
+      const lv = await af(`/fixtures?live=all`);
+      const map = {};
+      for (const f of (lv.response || [])) {
+        const k = normTeam(f.teams.home.name) + "|" + normTeam(f.teams.away.name);
+        map[k] = { id: f.fixture.id, elapsed: f.fixture.status.elapsed, short: f.fixture.status.short, sh: f.goals.home, sa: f.goals.away };
+      }
+      for (const o of out) {
+        if (!o.live) continue;
+        const nh = normTeam(o.home), na = normTeam(o.away);
+        for (const k in map) {
+          const [h, a] = k.split("|");
+          if ((h.includes(nh) || nh.includes(h)) && (a.includes(na) || na.includes(a))) {
+            o.fixtureId = map[k].id; o.elapsed = map[k].elapsed; o.half = map[k].short;
+            o.score = `${map[k].sh}-${map[k].sa}`; break;
+          }
+        }
+      }
+    } catch (_) { /* sem dados ao vivo no plano grátis: lista segue sem minuto */ }
+  }
+
   out.sort((a, b) => (b.live - a.live) || (new Date(a.commence) - new Date(b.commence)));
   res.json({ ok: true, remaining, count: out.length, games: out });
+});
+
+// DASHBOARD AO VIVO: estatísticas de um jogo em andamento (API-Football).
+app.get("/api/match-stats", async (req, res) => {
+  const fid = req.query.fixtureId;
+  if (!API_FOOTBALL_KEY) return res.status(400).json({ error: "API_FOOTBALL_KEY não configurada." });
+  if (!fid) return res.status(400).json({ error: "fixtureId obrigatório." });
+  try {
+    const d = await af(`/fixtures/statistics?fixture=${fid}`);
+    const resp = d.response || [];
+    if (resp.length < 2) return res.json({ ok: true, available: false, message: "Estatísticas ao vivo ainda não disponíveis para este jogo (ou plano grátis não cobre)." });
+    const pick = (t, type) => { const s = (t.statistics || []).find(x => x.type === type); return s && s.value != null ? s.value : 0; };
+    const fmt = t => ({
+      team: t.team.name,
+      posse: pick(t, "Ball Possession"),
+      finalizacoes: pick(t, "Total Shots"),
+      noGol: pick(t, "Shots on Goal"),
+      escanteios: pick(t, "Corner Kicks"),
+      faltas: pick(t, "Fouls"),
+      amarelos: pick(t, "Yellow Cards"),
+      vermelhos: pick(t, "Red Cards"),
+    });
+    res.json({ ok: true, available: true, home: fmt(resp[0]), away: fmt(resp[1]) });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
 });
 
 // ─────────────────────── STATIC (frontend) ─────────────────────────────────

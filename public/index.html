@@ -807,6 +807,34 @@ async function autoPickNow(){
   }catch(e){ $('now-out').innerHTML = `<div class="err">${e.message}</div>`; }
 }
 let LIVE_DATA=null;
+function halfLabel(s){return {'1H':'1º tempo','2H':'2º tempo','HT':'Intervalo','ET':'Prorrogação','P':'Pênaltis','BT':'Intervalo'}[s]||'ao vivo';}
+async function openDash(i){
+  const g=LIVE_DATA && LIVE_DATA.games[i]; if(!g||!g.fixtureId) return;
+  $('now-out').innerHTML = loadingBox('📊 Carregando dashboard ao vivo...');
+  try{
+    const r=await fetch('/api/match-stats?fixtureId='+g.fixtureId);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Erro.');
+    const head=`<div class="topbet"><div class="tb-lbl">🔴 AO VIVO · ${g.league.toUpperCase()}</div>
+      <div class="tb-bet" style="font-size:30px">${g.score||'0-0'}</div>
+      <div class="tb-desc">${g.game} · ${g.elapsed!=null?g.elapsed+"' · "+halfLabel(g.half):'em andamento'}</div></div>`;
+    if(!d.available){ $('now-out').innerHTML=head+`<div class="card"><p class="note" style="margin-top:0">${d.message}</p></div><button class="ghost" onclick="loadLive()">← voltar pra lista</button>`; return; }
+    const stat=(label,h,a,isPct)=>{const hv=parseFloat(h)||0,av=parseFloat(a)||0;const w=isPct?hv:((hv+av)?Math.round(hv/(hv+av)*100):50);
+      return `<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><b style="color:var(--green)">${h??0}</b><span style="color:var(--dim)">${label}</span><b style="color:var(--red)">${a??0}</b></div>
+      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--bg)"><div style="width:${w}%;background:var(--green)"></div><div style="flex:1;background:var(--red)"></div></div></div>`;};
+    $('now-out').innerHTML = head + `<div class="card"><div class="sec">${d.home.team} (casa) vs ${d.away.team} (fora)</div>
+      ${stat('Posse de bola', d.home.posse, d.away.posse, true)}
+      ${stat('Finalizações', d.home.finalizacoes, d.away.finalizacoes)}
+      ${stat('Chutes a gol', d.home.noGol, d.away.noGol)}
+      ${stat('Escanteios', d.home.escanteios, d.away.escanteios)}
+      ${stat('Faltas', d.home.faltas, d.away.faltas)}
+      ${stat('Cartões amarelos', d.home.amarelos, d.away.amarelos)}
+      ${(parseFloat(d.home.vermelhos)||parseFloat(d.away.vermelhos))?stat('Cartões vermelhos', d.home.vermelhos, d.away.vermelhos):''}
+    </div>
+    <button class="ghost" onclick="loadLive()">← voltar pra lista ao vivo</button>
+    <div class="disc">Estatísticas ao vivo via API-Football. xG e "ataques perigosos" não entram no plano grátis. Aposte com responsabilidade.</div>`;
+  }catch(e){ $('now-out').innerHTML = `<div class="err">${e.message}</div>`; }
+}
 async function loadLive(){
   $('now-out').innerHTML = loadingBox('📺 Buscando jogos ao vivo e de hoje em todas as ligas...');
   try{
@@ -818,14 +846,19 @@ async function loadLive(){
     const liveN = d.games.filter(g=>g.live).length;
     $('now-out').innerHTML = `<div class="ok">📺 ${d.count} jogos · ${liveN} ao vivo agora${d.remaining!=null?` · créditos: ${d.remaining}`:''}</div>` +
       `<div class="card"><div class="sec">Jogos — clique pra analisar</div>` +
-      d.games.map((g,i)=>`<div class="rank ${g.live?'top':''}">
+      d.games.map((g,i)=>{
+        const liveTxt = g.live ? (g.elapsed!=null ? `🔴 ${g.elapsed}' · ${halfLabel(g.half)}${g.score?' · '+g.score:''}` : '🔴 AO VIVO') : '';
+        return `<div class="rank ${g.live?'top':''}">
         <div style="flex:1">
-          <div style="font-size:12px;font-weight:700">${g.live?'<span style="color:#ff6b6b">🔴 AO VIVO</span> ':''}${g.game}</div>
-          <div style="font-size:10px;color:var(--dim)">${g.league} · ${g.live?'em andamento':'começa em '}${g.live?'':`<b data-commence="${g.commence}"></b>`}</div>
+          <div style="font-size:12px;font-weight:700">${g.live?`<span style="color:#ff6b6b">${liveTxt}</span> `:''}${g.game}</div>
+          <div style="font-size:10px;color:var(--dim)">${g.league}${g.live?'':' · começa em '}${g.live?'':`<b data-commence="${g.commence}"></b>`}</div>
           <div style="font-size:11px;color:var(--dim2);margin-top:3px">Casa ${g.odds.home?g.odds.home.toFixed(2):'-'} · Empate ${g.odds.draw?g.odds.draw.toFixed(2):'-'} · Fora ${g.odds.away?g.odds.away.toFixed(2):'-'}</div>
-          <button class="ghost" style="margin:6px 0 0;padding:6px 10px;width:auto;font-size:11px;color:var(--green)" onclick="analyzeLive(${i})">Analisar este jogo →</button>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            ${g.live&&g.fixtureId?`<button class="ghost" style="margin:0;padding:6px 10px;width:auto;font-size:11px;color:var(--blue)" onclick="openDash(${i})">📊 Dashboard</button>`:''}
+            <button class="ghost" style="margin:0;padding:6px 10px;width:auto;font-size:11px;color:var(--green)" onclick="analyzeLive(${i})">Analisar →</button>
+          </div>
         </div>
-      </div>`).join('') +
+      </div>`;}).join('') +
       `</div><div class="disc">Lista de jogos ao vivo e de hoje das ligas cobertas. Clique pra cruzar com o modelo e achar valor.</div>`;
     tickCountdowns(); if(NOW_TIMER)clearInterval(NOW_TIMER); NOW_TIMER=setInterval(tickCountdowns,1000);
   }catch(e){ $('now-out').innerHTML = `<div class="err">${e.message}</div>`; }
